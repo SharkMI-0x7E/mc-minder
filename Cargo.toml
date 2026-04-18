@@ -1,0 +1,40 @@
+[package]
+name = "mc-minder"
+version = "0.1.0"
+edition = "2021"
+authors = ["SharkMI-0x7E"]
+description = "A smart management suite for Minecraft Fabric servers on Termux/Android"
+license = "MIT"
+repository = "https://github.com/SharkMI-0x7E/mc-minder"
+readme = "README.md"
+homepage = "https://github.com/SharkMI-0x7E/mc-minder"
+documentation = "https://docs.rs/mc-minder"
+keywords = ["minecraft", "server", "management", "termux", "fabric", "rcon", "ai"]
+categories = ["command-line-utilities", "games"]
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+log = "0.4"
+env_logger = "0.10"
+clap = { version = "4.4", features = ["derive"] }
+anyhow = "1.0"
+thiserror = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1.0"
+regex = "1.10"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+bytes = "1.5"
+byteorder = "1.5"
+warp = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
