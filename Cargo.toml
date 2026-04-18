@@ -9,7 +9,7 @@ repository = "https://github.com/SharkMI-0x7E/mc-minder"
 readme = "README.md"
 homepage = "https://github.com/SharkMI-0x7E/mc-minder"
 documentation = "https://docs.rs/mc-minder"
-keywords = ["minecraft", "server", "management", "termux", "fabric", "rcon", "ai"]
+keywords = ["minecraft", "server", "management", "rcon", "ai"]
 categories = ["command-line-utilities", "games"]
 
 [dependencies]
