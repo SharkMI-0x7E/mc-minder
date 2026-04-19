@@ -29,7 +29,7 @@ const LOG_FILE_MAX_SIZE: u64 = 50 * 1024 * 1024;
 #[derive(Parser, Debug)]
 #[command(name = "mc-minder")]
 #[command(author = "SharkMI-0x7E")]
-#[command(version = "0.3.0")]
+#[command(version = "0.3.1")]
 #[command(about = "A smart management suite for Minecraft Fabric servers")]
 struct Args {
     #[command(subcommand)]
@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
 }
 
 fn print_banner() {
-    println!("{}", "MC-Minder v0.3.0".green().bold());
+    println!("{}", "MC-Minder v0.3.1".green().bold());
     println!("{}", "A smart management suite for Minecraft Fabric servers".dimmed());
     println!();
 }

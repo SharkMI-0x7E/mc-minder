@@ -360,7 +360,7 @@ case "${1:-}" in
         fi
         ;;
     *)
-        echo "MC-Minder - Minecraft 服务器管理器 v0.3.0"
+        echo "MC-Minder - Minecraft 服务器管理器 v0.3.1"
         echo ""
         echo "用法: $0 {start|stop|restart|status|attach|logs|init|update}"
         echo ""
