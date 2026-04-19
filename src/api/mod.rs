@@ -6,7 +6,7 @@ use warp::Filter;
 use serde::{Serialize, Deserialize};
 
 use crate::context::ContextManager;
-use crate::rcon_client::RconClient;
+use crate::rcon::RconClient;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
@@ -49,7 +49,6 @@ impl HttpApi {
 
     pub async fn start(self: Arc<Self>) -> Result<()> {
         let context = self.context.clone();
-        let rcon = self.rcon.clone();
         let start_time = self.start_time;
         let port = self.port;
 

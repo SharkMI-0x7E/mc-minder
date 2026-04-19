@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use chrono::{DateTime, Local};
-use crate::ai_client::Message;
+use crate::ai::Message;
 
 const MAX_CONTEXT_MESSAGES: usize = 20;
 const CONTEXT_EXPIRY_HOURS: i64 = 2;

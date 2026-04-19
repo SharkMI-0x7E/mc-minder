@@ -4,8 +4,6 @@ use anyhow::{Result, Context};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    #[serde(default)]
-    pub server: ServerConfig,
     pub rcon: RconConfig,
     pub ai: Option<AiConfig>,
     pub ollama: Option<OllamaConfig>,
@@ -13,38 +11,6 @@ pub struct Config {
     pub backup: BackupConfig,
     #[serde(default)]
     pub notification: NotificationConfig,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ServerConfig {
-    #[serde(default = "default_jar")]
-    pub jar: String,
-    #[serde(default = "default_min_mem")]
-    pub min_mem: String,
-    #[serde(default = "default_max_mem")]
-    pub max_mem: String,
-    #[serde(default = "default_session")]
-    pub session_name: String,
-    #[serde(default = "default_log_file")]
-    pub log_file: String,
-}
-
-fn default_jar() -> String { "fabric-server.jar".to_string() }
-fn default_min_mem() -> String { "512M".to_string() }
-fn default_max_mem() -> String { "1G".to_string() }
-fn default_session() -> String { "mc_server".to_string() }
-fn default_log_file() -> String { "logs/latest.log".to_string() }
-
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self {
-            jar: default_jar(),
-            min_mem: default_min_mem(),
-            max_mem: default_max_mem(),
-            session_name: default_session(),
-            log_file: default_log_file(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

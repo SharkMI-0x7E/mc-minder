@@ -4,18 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
-[English](#english) | [中文](#中文)
-
----
-
-<a name="中文"></a>
-## 中文
+[English](./README_en.md) | 中文
 
 一个为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件。
 
 > 本项目由 AI 辅助编写。
 
-### 功能特性
+## 功能特性
 
 - **日志监控**：实时监控服务器日志，解析聊天/加入/离开/死亡事件
 - **AI 聊天机器人**：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发
@@ -24,15 +19,15 @@
 - **HTTP API**：RESTful API 用于状态查询、历史记录和命令执行
 - **Shell 脚本**：集成启动/停止/监控/备份管理
 
-### 安装
+## 安装
 
-#### 从 crates.io 安装
+### 从 crates.io 安装
 
 ```bash
 cargo install mc-minder
 ```
 
-#### 从源码编译
+### 从源码编译
 
 ```bash
 git clone https://github.com/SharkMI-0x7E/mc-minder.git
@@ -40,21 +35,22 @@ cd mc-minder
 cargo build --release
 ```
 
-#### Termux/Android (aarch64)
+### Termux/Android (aarch64)
 
 ```bash
 cargo build --target aarch64-linux-android --release
 ```
 
-### 使用方法
+## 使用方法
 
-#### 1. 目录结构
+### 1. 目录结构
 
 ```
 MC_server/                      # 服务器根目录
 ├── fabric-server.jar           # 服务端核心
+├── server.properties           # 服务器配置（端口、IP等在此配置）
 ├── start.sh                    # 启动脚本（从 scripts/ 复制）
-├── config.toml                 # 配置文件
+├── config.toml                 # MC-Minder 配置文件
 ├── logs/
 │   └── latest.log
 ├── world/
@@ -64,9 +60,11 @@ MC_server/                      # 服务器根目录
     └── target/release/mc-minder
 ```
 
-#### 2. 配置
+### 2. 配置
 
-将 `config.example.toml` 复制到服务器根目录并重命名为 `config.toml`：
+**服务器配置**（端口、服务器名、IP等）请在 `server.properties` 中配置，这是 Minecraft 原生配置文件。
+
+**MC-Minder 配置**：将 `config.example.toml` 复制到服务器根目录并重命名为 `config.toml`：
 
 ```bash
 cp mc-minder/config.example.toml ./config.toml
@@ -75,36 +73,34 @@ cp mc-minder/config.example.toml ./config.toml
 编辑 `config.toml`：
 
 ```toml
-[server]
-jar = "fabric-server.jar"
-min_mem = "512M"
-max_mem = "1G"
-session_name = "mc_server"
-log_file = "logs/latest.log"
-
+# RCON 配置 - MC-Minder 与 Minecraft 服务器通信必需
 [rcon]
 host = "127.0.0.1"
 port = 25575
 password = "your_rcon_password"
 
+# AI 配置 - 留空或删除此部分可禁用 AI 功能
 [ai]
-api_url = "https://api.openai.com/v1/chat/completions"
-api_key = "sk-xxx"
+api_url = ""
+api_key = ""
 model = "gpt-3.5-turbo"
 trigger = "!"
 max_tokens = 150
 temperature = 0.7
 
+# Ollama 配置 - 设置 enabled = true 使用本地 AI
 [ollama]
 enabled = false
 url = "http://localhost:11434/api/generate"
 model = "qwen:0.5b"
 
+# 备份配置
 [backup]
 world_dir = "world"
 backup_dest = "../backups"
 retain_days = 7
 
+# 通知配置 - 留空禁用通知功能
 [notification]
 telegram_bot_token = ""
 telegram_chat_id = ""
@@ -112,10 +108,27 @@ termux_notify = true
 ```
 
 **注意**：配置项留空表示不启用该功能。例如：
-- `[ai]` 部分留空或删除整个 `[ai]` 块将禁用 AI 功能
+- `[ai]` 部分的 `api_key` 留空将禁用 AI 功能
 - `[notification]` 中的 `telegram_bot_token` 留空将禁用 Telegram 通知
 
-#### 3. 启动服务器
+### 3. Windows/Linux 换行符问题
+
+如果在 Windows 上编辑脚本后在 Linux/Termux 上运行报错，需要转换换行符：
+
+```bash
+# 方法一：使用 dos2unix
+dos2unix start.sh
+dos2unix backup.sh
+
+# 方法二：使用 sed
+sed -i 's/\r$//' start.sh
+sed -i 's/\r$//' backup.sh
+
+# 方法三：批量转换
+sed -i 's/\r$//' *.sh
+```
+
+### 4. 启动服务器
 
 ```bash
 # 复制脚本到服务器根目录
@@ -135,7 +148,7 @@ cp mc-minder/scripts/start_en.sh ./  # 英文版
 ./start.sh attach
 ```
 
-#### 4. AI 聊天使用
+### 5. AI 聊天使用
 
 玩家在游戏中使用 `!` 前缀触发 AI 响应：
 
@@ -145,7 +158,7 @@ cp mc-minder/scripts/start_en.sh ./  # 英文版
 !如何制作钻石剑？
 ```
 
-### HTTP API
+## HTTP API
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
@@ -165,13 +178,14 @@ curl -X POST http://localhost:8080/command \
   -d '{"command": "list"}'
 ```
 
-### 项目结构
+## 项目结构
 
 ```
 mc-minder/
 ├── Cargo.toml              # Rust 项目配置
 ├── config.example.toml     # 配置示例
-├── README.md               # 本文件
+├── README.md               # 中文文档
+├── README_en.md            # 英文文档
 ├── LICENSE                 # MIT 许可证
 ├── .gitignore
 ├── scripts/
@@ -181,15 +195,15 @@ mc-minder/
 └── src/
     ├── main.rs             # 主入口
     ├── lib.rs              # 库导出
-    ├── config.rs           # 配置解析
-    ├── log_monitor.rs      # 日志监控
-    ├── ai_client.rs        # AI API 客户端
-    ├── rcon_client.rs      # RCON 协议客户端
-    ├── context.rs          # 对话上下文管理
-    └── http_api.rs         # HTTP API 服务
+    ├── config/             # 配置模块
+    ├── monitor/            # 日志监控模块
+    ├── ai/                 # AI 客户端模块
+    ├── rcon/               # RCON 协议模块
+    ├── context/            # 上下文管理模块
+    └── api/                # HTTP API 模块
 ```
 
-### 命令行选项
+## 命令行选项
 
 ```
 mc-minder [OPTIONS]
@@ -198,11 +212,12 @@ mc-minder [OPTIONS]
   -c, --config <PATH>  配置文件路径 [默认: ../config.toml]
   -v, --verbose        启用详细日志
       --http-port      HTTP API 端口 [默认: 8080]
+      --log-file       日志文件路径 [默认: logs/latest.log]
   -h, --help           显示帮助
   -V, --version        显示版本
 ```
 
-### 备份
+## 备份
 
 ```bash
 # 创建备份
@@ -218,14 +233,14 @@ mc-minder [OPTIONS]
 ./backup.sh clean
 ```
 
-### 系统要求
+## 系统要求
 
 - Rust 1.70+
 - Java（用于 Minecraft 服务器）
 - tmux（用于会话管理）
 - 可选：Ollama（用于本地 AI）
 
-### 贡献
+## 贡献
 
 欢迎贡献！请随时提交 Pull Request。
 
@@ -235,257 +250,15 @@ mc-minder [OPTIONS]
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 打开 Pull Request
 
-### 许可证
+## 许可证
 
 本项目采用 MIT 许可证 - 详情请见 [LICENSE](LICENSE) 文件。
 
-### 致谢
+## 致谢
 
 - 本项目由 AI 辅助编写
 - 灵感来源于移动设备上轻量级 Minecraft 服务器管理的需求
 
-### 作者
-
-- GitHub: [@SharkMI-0x7E](https://github.com/SharkMI-0x7E)
-
----
-
-<a name="english"></a>
-## English
-
-A smart management suite for Minecraft Fabric servers on Termux/Android.
-
-> This project was written with AI assistance.
-
-### Features
-
-- **Log Monitoring**: Real-time monitoring of server logs, parsing chat/join/leave/death events
-- **AI Chatbot**: Support for OpenAI API and Ollama, triggered by `!` prefix
-- **RCON Communication**: Native RCON protocol implementation for sending commands and messages
-- **Context Memory**: Per-player conversation history with automatic expiration
-- **HTTP API**: RESTful API for status queries, history, and command execution
-- **Shell Scripts**: Integrated start/stop/monitor/backup management
-
-### Installation
-
-#### From crates.io
-
-```bash
-cargo install mc-minder
-```
-
-#### From Source
-
-```bash
-git clone https://github.com/SharkMI-0x7E/mc-minder.git
-cd mc-minder
-cargo build --release
-```
-
-#### For Termux/Android (aarch64)
-
-```bash
-cargo build --target aarch64-linux-android --release
-```
-
-### Usage
-
-#### 1. Directory Structure
-
-```
-MC_server/                      # Server root directory
-├── fabric-server.jar           # Server core
-├── start.sh                    # Startup script (copy from scripts/)
-├── config.toml                 # Configuration file
-├── logs/
-│   └── latest.log
-├── world/
-└── mc-minder/                  # This project
-    ├── Cargo.toml
-    ├── src/
-    └── target/release/mc-minder
-```
-
-#### 2. Configuration
-
-Copy `config.example.toml` to your server root directory and rename to `config.toml`:
-
-```bash
-cp mc-minder/config.example.toml ./config.toml
-```
-
-Edit `config.toml`:
-
-```toml
-[server]
-jar = "fabric-server.jar"
-min_mem = "512M"
-max_mem = "1G"
-session_name = "mc_server"
-log_file = "logs/latest.log"
-
-[rcon]
-host = "127.0.0.1"
-port = 25575
-password = "your_rcon_password"
-
-[ai]
-api_url = "https://api.openai.com/v1/chat/completions"
-api_key = "sk-xxx"
-model = "gpt-3.5-turbo"
-trigger = "!"
-max_tokens = 150
-temperature = 0.7
-
-[ollama]
-enabled = false
-url = "http://localhost:11434/api/generate"
-model = "qwen:0.5b"
-
-[backup]
-world_dir = "world"
-backup_dest = "../backups"
-retain_days = 7
-
-[notification]
-telegram_bot_token = ""
-telegram_chat_id = ""
-termux_notify = true
-```
-
-**Note**: Leave configuration items empty to disable that feature. For example:
-- Leaving `[ai]` section empty or removing the entire `[ai]` block will disable AI features
-- Leaving `telegram_bot_token` empty in `[notification]` will disable Telegram notifications
-
-#### 3. Start the Server
-
-```bash
-# Copy scripts to server root
-cp mc-minder/scripts/start.sh ./
-cp mc-minder/scripts/start_en.sh ./  # English version
-
-# Start
-./start.sh start
-
-# Stop
-./start.sh stop
-
-# Status
-./start.sh status
-
-# Attach to console
-./start.sh attach
-```
-
-#### 4. AI Chat Usage
-
-Players can trigger AI responses by prefixing their message with `!`:
-
-```
-!hello
-!help
-!how to make a diamond sword?
-```
-
-### HTTP API
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/status` | GET | Get server status and uptime |
-| `/history` | GET | Get conversation history |
-| `/command` | POST | Execute RCON command |
-
-Example:
-
-```bash
-# Get status
-curl http://localhost:8080/status
-
-# Execute command
-curl -X POST http://localhost:8080/command \
-  -H "Content-Type: application/json" \
-  -d '{"command": "list"}'
-```
-
-### Project Structure
-
-```
-mc-minder/
-├── Cargo.toml              # Rust project configuration
-├── config.example.toml     # Configuration example
-├── README.md               # This file
-├── LICENSE                 # MIT License
-├── .gitignore
-├── scripts/
-│   ├── start.sh            # Startup script (Chinese)
-│   ├── start_en.sh         # Startup script (English)
-│   └── backup.sh           # Backup utility
-└── src/
-    ├── main.rs             # Main entry point
-    ├── lib.rs              # Library exports
-    ├── config.rs           # Configuration parsing
-    ├── log_monitor.rs      # Log file monitoring
-    ├── ai_client.rs        # AI API client
-    ├── rcon_client.rs      # RCON protocol client
-    ├── context.rs          # Conversation context manager
-    └── http_api.rs         # HTTP API server
-```
-
-### Command Line Options
-
-```
-mc-minder [OPTIONS]
-
-Options:
-  -c, --config <PATH>  Configuration file path [default: ../config.toml]
-  -v, --verbose        Enable verbose logging
-      --http-port      HTTP API port [default: 8080]
-  -h, --help           Show help
-  -V, --version        Show version
-```
-
-### Backup
-
-```bash
-# Create backup
-./backup.sh create
-
-# List backups
-./backup.sh list
-
-# Restore from backup
-./backup.sh restore ../backups/mc-backup-20240101-120000.tar.gz
-
-# Clean old backups
-./backup.sh clean
-```
-
-### Requirements
-
-- Rust 1.70+
-- Java (for Minecraft server)
-- tmux (for session management)
-- Optional: Ollama (for local AI)
-
-### Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-### License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-### Acknowledgments
-
-- This project was written with AI assistance
-- Inspired by the need for lightweight Minecraft server management on mobile devices
-
-### Author
+## 作者
 
 - GitHub: [@SharkMI-0x7E](https://github.com/SharkMI-0x7E)

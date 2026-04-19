@@ -6,23 +6,25 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Notify, RwLock};
 
 mod config;
-mod log_monitor;
-mod ai_client;
-mod rcon_client;
+mod monitor;
+mod ai;
+mod rcon;
 mod context;
-mod http_api;
+mod api;
 
 use config::Config;
-use log_monitor::{LogMonitor, LogEvent};
-use ai_client::AiClient;
-use rcon_client::RconClient;
+use monitor::{LogMonitor, LogEvent};
+use ai::AiClient;
+use rcon::RconClient;
 use context::ContextManager;
-use http_api::HttpApi;
+use api::HttpApi;
+
+const DEFAULT_LOG_FILE: &str = "logs/latest.log";
 
 #[derive(Parser, Debug)]
 #[command(name = "mc-minder")]
-#[command(author = "MC-Minder Team")]
-#[command(version = "0.1.0")]
+#[command(author = "SharkMI-0x7E")]
+#[command(version = "0.2.0")]
 #[command(about = "A smart management suite for Minecraft Fabric servers")]
 struct Args {
     #[arg(short, long, value_name = "PATH", default_value = "../config.toml")]
@@ -33,6 +35,9 @@ struct Args {
 
     #[arg(long, default_value = "8080")]
     http_port: u16,
+
+    #[arg(long, default_value = DEFAULT_LOG_FILE)]
+    log_file: String,
 }
 
 #[tokio::main]
@@ -55,7 +60,7 @@ async fn main() -> Result<()> {
 
     info!("Configuration loaded successfully");
 
-    let log_path = PathBuf::from(&config.server.log_file);
+    let log_path = PathBuf::from(&args.log_file);
     let log_monitor = LogMonitor::new(log_path)?;
 
     let ai_client = if let Some(ref ai_config) = config.ai {
