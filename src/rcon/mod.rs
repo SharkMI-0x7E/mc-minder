@@ -117,7 +117,7 @@ impl RconClient {
             .context("RCON write timeout")?
             .context("Failed to write to RCON stream")?;
 
-        timeout(WRITE_TIMEOUT, stream.flush())
+        let _ = timeout(WRITE_TIMEOUT, stream.flush())
             .await
             .context("RCON flush timeout")?;
 
@@ -207,7 +207,7 @@ impl RconClient {
     }
 
     pub async fn disconnect(&mut self) {
-        if let Some(stream) = self.stream.take() {
+        if let Some(mut stream) = self.stream.take() {
             let _ = stream.shutdown().await;
             self.connected.store(false, Ordering::Relaxed);
             info!("Disconnected from RCON");

@@ -3,8 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use dialoguer::{Input, Confirm};
 use log::{info, warn, error};
-use std::fs::{self, File, OpenOptions};
-use std::io::Write as IoWrite;
+use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
@@ -46,7 +45,7 @@ struct Args {
     http_port: u16,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 enum Commands {
     #[command(about = "Initialize configuration interactively")]
     Init,
@@ -77,8 +76,8 @@ enum Commands {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Some(cmd) = args.command {
-        return handle_command(cmd, &args).await;
+    if let Some(ref cmd) = args.command {
+        return handle_command(cmd.clone(), &args).await;
     }
 
     init_logger(args.verbose)?;
@@ -510,7 +509,7 @@ async fn run_server(args: Args) -> Result<()> {
 
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
     let http_api = Arc::new(HttpApi::new(args.http_port, context.clone(), rcon.clone()));
-    let shutdown_rx = shutdown_tx.subscribe();
+    let mut shutdown_rx = shutdown_tx.subscribe();
     let http_handle = tokio::spawn(async move {
         if let Err(e) = http_api.start(async move { shutdown_rx.recv().await.ok(); }).await {
             error!("HTTP API error: {}", e);
@@ -553,10 +552,10 @@ async fn run_server(args: Args) -> Result<()> {
                                                 }
                                             }
                                         }
-                                        Ok(ChatResult::RateLimited(msg)) => {
+                                        Ok(ChatResult::RateLimited(rate_limit_msg)) => {
                                             let mut rcon_guard = rcon.write().await;
                                             if let Some(ref mut rcon_client) = *rcon_guard {
-                                                let _ = rcon_client.tell(&msg.player, &msg).await;
+                                                let _ = rcon_client.tell(&player, &rate_limit_msg).await;
                                             }
                                         }
                                         Err(e) => {

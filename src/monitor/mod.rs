@@ -3,7 +3,6 @@ use log::{info, debug, warn};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
@@ -76,7 +75,6 @@ impl LogMonitor {
         let (tx, rx) = mpsc::channel(100);
         
         let log_path = self.log_path.clone();
-        let log_path_for_watcher = self.log_path.clone();
         
         info!("Started monitoring log file: {:?}", log_path);
 
@@ -96,7 +94,7 @@ impl LogMonitor {
             );
         }
 
-        let (notify_tx, mut notify_rx) = std::sync::mpsc::channel();
+        let (notify_tx, notify_rx) = std::sync::mpsc::channel();
         
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, notify::Error>| {
@@ -107,12 +105,15 @@ impl LogMonitor {
             Config::default(),
         ).context("Failed to create file watcher")?;
 
-        let parent_dir = log_path_for_watcher
+        let parent_dir = log_path
             .parent()
-            .context("Log file has no parent directory")?;
+            .context("Log file has no parent directory")?
+            .to_path_buf();
+        
+        let parent_dir_for_unwatch = parent_dir.clone();
         
         watcher
-            .watch(parent_dir, RecursiveMode::NonRecursive)
+            .watch(&parent_dir, RecursiveMode::NonRecursive)
             .context("Failed to watch log directory")?;
 
         let patterns = (
@@ -160,7 +161,7 @@ impl LogMonitor {
                     }
                 }
             }
-            let _ = watcher.unwatch(parent_dir);
+            let _ = watcher.unwatch(&parent_dir_for_unwatch);
         });
 
         Ok(rx)
