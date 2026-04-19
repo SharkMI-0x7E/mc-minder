@@ -143,15 +143,28 @@ impl Config {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {:?}", path))?;
         
-        let config: Config = toml::from_str(&content)
+        let mut config: Config = toml::from_str(&content)
             .with_context(|| "Failed to parse config file")?;
+        
+        if let Some(ref ai) = config.ai {
+            if ai.api_key.is_empty() || ai.api_url.is_empty() {
+                config.ai = None;
+            }
+        }
         
         Ok(config)
     }
 
     pub fn load_from_str(content: &str) -> Result<Self> {
-        let config: Config = toml::from_str(content)
+        let mut config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config content")?;
+        
+        if let Some(ref ai) = config.ai {
+            if ai.api_key.is_empty() || ai.api_url.is_empty() {
+                config.ai = None;
+            }
+        }
+        
         Ok(config)
     }
 }
