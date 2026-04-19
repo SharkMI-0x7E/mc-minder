@@ -360,7 +360,7 @@ case "${1:-}" in
         fi
         ;;
     *)
-        echo "MC-Minder - Minecraft Server Manager v0.3.1"
+        echo "MC-Minder - Minecraft Server Manager v0.3.2"
         echo ""
         echo "Usage: $0 {start|stop|restart|status|attach|logs|init|update}"
         echo ""

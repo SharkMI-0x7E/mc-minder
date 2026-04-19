@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
 }
 
 fn print_banner() {
-    println!("{}", "MC-Minder v0.3.1".green().bold());
+    println!("{}", "MC-Minder v0.3.2".green().bold());
     println!("{}", "A smart management suite for Minecraft Fabric servers".dimmed());
     println!();
 }
