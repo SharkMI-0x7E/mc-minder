@@ -1,15 +1,24 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result, bail};
 use log::{debug, warn};
 use reqwest::Client;
 use serde::{Serialize, Deserialize};
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Semaphore;
+use parking_lot::RwLock;
 use crate::config::{AiConfig, OllamaConfig};
+
+const MAX_CONCURRENT_REQUESTS: usize = 3;
+const PLAYER_COOLDOWN_SECS: u64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct AiClient {
     client: Client,
     config: AiConfig,
     ollama_config: Option<OllamaConfig>,
+    semaphore: Arc<Semaphore>,
+    last_request: Arc<RwLock<HashMap<String, Instant>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -48,6 +57,11 @@ struct OllamaResponse {
     response: String,
 }
 
+pub enum ChatResult {
+    Success(String),
+    RateLimited(String),
+}
+
 impl AiClient {
     pub fn new(config: AiConfig, ollama_config: Option<OllamaConfig>) -> Result<Self> {
         let client = Client::builder()
@@ -59,17 +73,50 @@ impl AiClient {
             client,
             config,
             ollama_config,
+            semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS)),
+            last_request: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
-    pub async fn chat(&self, messages: Vec<Message>) -> Result<String> {
-        if let Some(ref ollama) = self.ollama_config {
-            if ollama.enabled {
-                return self.chat_ollama(ollama, messages).await;
+    pub async fn chat(&self, messages: Vec<Message>, player: &str) -> Result<ChatResult> {
+        {
+            let last_requests = self.last_request.read();
+            if let Some(last_time) = last_requests.get(player) {
+                let elapsed = last_time.elapsed();
+                if elapsed < Duration::from_secs(PLAYER_COOLDOWN_SECS) {
+                    let wait_secs = PLAYER_COOLDOWN_SECS - elapsed.as_secs();
+                    return Ok(ChatResult::RateLimited(format!(
+                        "Please wait {} seconds before asking again.",
+                        wait_secs
+                    )));
+                }
             }
         }
+
+        let _permit = self.semaphore.acquire().await;
         
-        self.chat_openai(messages).await
+        {
+            let mut last_requests = self.last_request.write();
+            last_requests.insert(player.to_string(), Instant::now());
+        }
+
+        let result = if let Some(ref ollama) = self.ollama_config {
+            if ollama.enabled {
+                self.chat_ollama(ollama, messages).await
+            } else {
+                self.chat_openai(messages).await
+            }
+        } else {
+            self.chat_openai(messages).await
+        };
+
+        match result {
+            Ok(response) => Ok(ChatResult::Success(response)),
+            Err(e) => {
+                warn!("AI chat error: {}", e);
+                Err(e)
+            }
+        }
     }
 
     async fn chat_openai(&self, messages: Vec<Message>) -> Result<String> {
@@ -88,13 +135,25 @@ impl AiClient {
             .json(&request)
             .send()
             .await
-            .context("Failed to send request to OpenAI API")?;
+            .context("Failed to send request to OpenAI API. Please check your network connection and api_url in config.toml")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            
+            if status.as_u16() == 401 {
+                bail!(
+                    "OpenAI API authentication failed. \n\
+                     Please check that api_key in config.toml is correct."
+                );
+            } else if status.as_u16() == 429 {
+                bail!(
+                    "OpenAI API rate limit exceeded. Please try again later."
+                );
+            }
+            
             warn!("OpenAI API error: {} - {}", status, body);
-            anyhow::bail!("OpenAI API returned error: {}", status);
+            bail!("OpenAI API returned error: {}", status);
         }
 
         let chat_response: ChatResponse = response
@@ -129,13 +188,13 @@ impl AiClient {
             .json(&request)
             .send()
             .await
-            .context("Failed to send request to Ollama API")?;
+            .context("Failed to send request to Ollama API. Please ensure Ollama is running and the URL in config.toml is correct")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             warn!("Ollama API error: {} - {}", status, body);
-            anyhow::bail!("Ollama API returned error: {}", status);
+            bail!("Ollama API returned error: {}", status);
         }
 
         let ollama_response: OllamaResponse = response

@@ -1,3 +1,15 @@
+# MC-Minder Configuration File
+# MC-Minder 配置文件
+
+# Server Configuration
+# 服务器配置
+[server]
+jar = "fabric-server.jar"
+min_mem = "512M"
+max_mem = "1G"
+session_name = "mc_server"
+log_file = "logs/latest.log"
+
 # RCON Configuration - Required for MC-Minder to communicate with Minecraft server
 # RCON 配置 - MC-Minder 与 Minecraft 服务器通信必需
 [rcon]

@@ -1,0 +1,13 @@
+- [x] monitor/mod.rs 使用字节偏移量 `last_offset` 替代 `last_content` 字符串比较
+- [x] monitor/mod.rs 实现 inode 检测，文件轮转时重置偏移量
+- [x] api/mod.rs 的 `start` 方法接收 shutdown Future 参数
+- [x] api/mod.rs 使用 `bind_with_graceful_shutdown` 启动服务
+- [x] main.rs 将 shutdown 信号传递给 HTTP 服务
+- [x] rcon/mod.rs 的 `execute` 方法重连后只重试一次
+- [x] start.sh 的 `get_config_value` 正确处理双引号包围的值
+- [x] mc-minder 支持 `config get <key>` 子命令
+- [x] backup.sh 从 config.toml 读取 backup_dest
+- [x] .gitattributes 文件存在且内容正确
+- [x] .github/workflows/release.yml 存在且配置正确
+- [x] README.md 包含 CI 状态徽章
+- [x] README.md 包含换行符处理说明

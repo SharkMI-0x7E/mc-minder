@@ -1,5 +1,6 @@
 use anyhow::Result;
 use log::info;
+use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::Filter;
@@ -47,7 +48,10 @@ impl HttpApi {
         }
     }
 
-    pub async fn start(self: Arc<Self>) -> Result<()> {
+    pub async fn start<S>(self: Arc<Self>, shutdown: S) -> Result<()>
+    where
+        S: Future<Output = ()> + Send + 'static,
+    {
         let context = self.context.clone();
         let start_time = self.start_time;
         let port = self.port;
@@ -80,7 +84,7 @@ impl HttpApi {
                 async move {
                     let mut rcon_guard = rcon.write().await;
                     if let Some(ref mut rcon_client) = *rcon_guard {
-                        match rcon_client.execute(&req.command) {
+                        match rcon_client.execute(&req.command).await {
                             Ok(result) => {
                                 let response = CommandResponse {
                                     success: true,
@@ -99,7 +103,7 @@ impl HttpApi {
                     } else {
                         let response = CommandResponse {
                             success: false,
-                            result: "RCON not connected".to_string(),
+                            result: "RCON not connected. Please check server.properties for RCON settings.".to_string(),
                         };
                         Ok(warp::reply::json(&response))
                     }
@@ -114,7 +118,8 @@ impl HttpApi {
         info!("Starting HTTP API server on port {}", port);
 
         warp::serve(routes)
-            .run(([0, 0, 0, 0], port))
+            .bind_with_graceful_shutdown(([0, 0, 0, 0], port), shutdown)
+            .1
             .await;
 
         Ok(())

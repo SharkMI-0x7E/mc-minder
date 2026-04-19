@@ -7,6 +7,6 @@ pub mod api;
 
 pub use config::Config;
 pub use monitor::LogMonitor;
-pub use ai::AiClient;
+pub use ai::{AiClient, ChatResult, Message};
 pub use rcon::RconClient;
 pub use context::ContextManager;

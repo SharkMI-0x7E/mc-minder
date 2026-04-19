@@ -1,5 +1,6 @@
 # MC-Minder
 
+[![Build and Release](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml/badge.svg)](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml)
 [![Crates.io](https://img.shields.io/crates/v/mc-minder.svg)](https://crates.io/crates/mc-minder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
@@ -12,22 +13,58 @@
 
 ## 功能特性
 
-- **日志监控**：实时监控服务器日志，解析聊天/加入/离开/死亡事件
-- **AI 聊天机器人**：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发
-- **RCON 通信**：原生 RCON 协议实现，发送命令和消息
+- **日志监控**：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
+- **AI 聊天机器人**：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发，内置请求限流
+- **RCON 通信**：异步 RCON 协议实现，自动重连，不阻塞事件循环
 - **上下文记忆**：按玩家保存对话历史，自动过期清理
 - **HTTP API**：RESTful API 用于状态查询、历史记录和命令执行
-- **Shell 脚本**：集成启动/停止/监控/备份管理
+- **一键安装**：交互式初始化，自动检测环境依赖
+- **自动更新**：内置 self-update 命令
 
-## 安装
+## 快速开始
 
-### 从 crates.io 安装
+### 一键安装
+
+```bash
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+```
+
+### 初始化配置
+
+```bash
+./mc-minder init
+```
+
+这将引导你完成配置：
+1. 设置 RCON 密码
+2. 选择是否启用 AI 功能
+3. 配置服务器内存和会话名称
+
+### 启动服务器
+
+```bash
+./start.sh start
+```
+
+## 安装方式
+
+### 方式一：预编译二进制（推荐）
+
+```bash
+# 下载安装脚本
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+
+# 初始化配置
+./mc-minder init
+```
+
+### 方式二：从 crates.io 安装
 
 ```bash
 cargo install mc-minder
 ```
 
-### 从源码编译
+### 方式三：从源码编译
 
 ```bash
 git clone https://github.com/SharkMI-0x7E/mc-minder.git
@@ -43,43 +80,44 @@ cargo build --target aarch64-linux-android --release
 
 ## 使用方法
 
-### 1. 目录结构
+### 目录结构
 
 ```
 MC_server/                      # 服务器根目录
 ├── fabric-server.jar           # 服务端核心
-├── server.properties           # 服务器配置（端口、IP等在此配置）
-├── start.sh                    # 启动脚本（从 scripts/ 复制）
+├── server.properties           # 服务器配置
+├── mc-minder                   # MC-Minder 二进制
+├── start.sh                    # 启动脚本
+├── backup.sh                   # 备份脚本
 ├── config.toml                 # MC-Minder 配置文件
 ├── logs/
-│   └── latest.log
-├── world/
-└── mc-minder/                  # 本项目
-    ├── Cargo.toml
-    ├── src/
-    └── target/release/mc-minder
+│   ├── latest.log              # 服务器日志
+│   └── mc-minder.log           # MC-Minder 日志
+└── world/
 ```
 
-### 2. 配置
+### 配置
 
-**服务器配置**（端口、服务器名、IP等）请在 `server.properties` 中配置，这是 Minecraft 原生配置文件。
+**服务器配置**（端口、服务器名、IP等）请在 `server.properties` 中配置。
 
-**MC-Minder 配置**：将 `config.example.toml` 复制到服务器根目录并重命名为 `config.toml`：
-
-```bash
-cp mc-minder/config.example.toml ./config.toml
-```
-
-编辑 `config.toml`：
+**MC-Minder 配置**：编辑 `config.toml`：
 
 ```toml
+# 服务器配置
+[server]
+jar = "fabric-server.jar"
+min_mem = "512M"
+max_mem = "1G"
+session_name = "mc_server"
+log_file = "logs/latest.log"
+
 # RCON 配置 - MC-Minder 与 Minecraft 服务器通信必需
 [rcon]
 host = "127.0.0.1"
 port = 25575
 password = "your_rcon_password"
 
-# AI 配置 - 留空或删除此部分可禁用 AI 功能
+# AI 配置 - 留空禁用 AI 功能
 [ai]
 api_url = ""
 api_key = ""
@@ -100,55 +138,41 @@ world_dir = "world"
 backup_dest = "../backups"
 retain_days = 7
 
-# 通知配置 - 留空禁用通知功能
+# 通知配置
 [notification]
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
 ```
 
-**注意**：配置项留空表示不启用该功能。例如：
-- `[ai]` 部分的 `api_key` 留空将禁用 AI 功能
-- `[notification]` 中的 `telegram_bot_token` 留空将禁用 Telegram 通知
-
-### 3. Windows/Linux 换行符问题
-
-如果在 Windows 上编辑脚本后在 Linux/Termux 上运行报错，需要转换换行符：
+### 启动脚本命令
 
 ```bash
-# 方法一：使用 dos2unix
-dos2unix start.sh
-dos2unix backup.sh
-
-# 方法二：使用 sed
-sed -i 's/\r$//' start.sh
-sed -i 's/\r$//' backup.sh
-
-# 方法三：批量转换
-sed -i 's/\r$//' *.sh
+./start.sh start      # 启动服务器和 MC-Minder
+./start.sh stop       # 停止所有服务
+./start.sh restart    # 重启服务
+./start.sh status     # 查看状态
+./start.sh attach     # 附加到服务器控制台
+./start.sh logs       # 查看服务器日志
+./start.sh minder-logs # 查看 MC-Minder 日志
+./start.sh init       # 初始化配置
+./start.sh update     # 更新 MC-Minder
 ```
 
-### 4. 启动服务器
+### MC-Minder 命令行
 
 ```bash
-# 复制脚本到服务器根目录
-cp mc-minder/scripts/start.sh ./
-cp mc-minder/scripts/start_en.sh ./  # 英文版
-
-# 启动
-./start.sh start
-
-# 停止
-./start.sh stop
-
-# 查看状态
-./start.sh status
-
-# 附加到控制台
-./start.sh attach
+./mc-minder init          # 交互式初始化
+./mc-minder gen-config    # 生成默认配置文件
+./mc-minder gen-start     # 生成 start.sh
+./mc-minder gen-backup    # 生成 backup.sh
+./mc-minder self-update   # 更新到最新版本
+./mc-minder config        # 显示当前配置
+./mc-minder config get <key>  # 获取配置值（如 backup_dest）
+./mc-minder --help        # 显示帮助
 ```
 
-### 5. AI 聊天使用
+### AI 聊天使用
 
 玩家在游戏中使用 `!` 前缀触发 AI 响应：
 
@@ -157,6 +181,10 @@ cp mc-minder/scripts/start_en.sh ./  # 英文版
 !help
 !如何制作钻石剑？
 ```
+
+**限流机制**：
+- 同一玩家请求间隔至少 2 秒
+- 最大并发请求数为 3
 
 ## HTTP API
 
@@ -178,41 +206,23 @@ curl -X POST http://localhost:8080/command \
   -d '{"command": "list"}'
 ```
 
-## 项目结构
-
-```
-mc-minder/
-├── Cargo.toml              # Rust 项目配置
-├── config.example.toml     # 配置示例
-├── README.md               # 中文文档
-├── README_en.md            # 英文文档
-├── LICENSE                 # MIT 许可证
-├── .gitignore
-├── scripts/
-│   ├── start.sh            # 启动脚本（中文）
-│   ├── start_en.sh         # 启动脚本（英文）
-│   └── backup.sh           # 备份工具
-└── src/
-    ├── main.rs             # 主入口
-    ├── lib.rs              # 库导出
-    ├── config/             # 配置模块
-    ├── monitor/            # 日志监控模块
-    ├── ai/                 # AI 客户端模块
-    ├── rcon/               # RCON 协议模块
-    ├── context/            # 上下文管理模块
-    └── api/                # HTTP API 模块
-```
-
 ## 命令行选项
 
 ```
-mc-minder [OPTIONS]
+mc-minder [OPTIONS] [COMMAND]
 
-选项:
-  -c, --config <PATH>  配置文件路径 [默认: ../config.toml]
+Commands:
+  init         交互式初始化配置
+  gen-config   生成默认配置文件
+  gen-start    生成 start.sh 脚本
+  gen-backup   生成 backup.sh 脚本
+  self-update  更新到最新版本
+  config       显示当前配置
+
+Options:
+  -c, --config <PATH>  配置文件路径 [默认: config.toml]
   -v, --verbose        启用详细日志
       --http-port      HTTP API 端口 [默认: 8080]
-      --log-file       日志文件路径 [默认: logs/latest.log]
   -h, --help           显示帮助
   -V, --version        显示版本
 ```
@@ -220,25 +230,50 @@ mc-minder [OPTIONS]
 ## 备份
 
 ```bash
-# 创建备份
-./backup.sh create
-
-# 列出备份
-./backup.sh list
-
-# 从备份恢复
-./backup.sh restore ../backups/mc-backup-20240101-120000.tar.gz
-
-# 清理旧备份
-./backup.sh clean
+./backup.sh create   # 创建备份
+./backup.sh list     # 列出备份
+./backup.sh restore <file>  # 从备份恢复
+./backup.sh clean    # 清理旧备份
 ```
 
 ## 系统要求
 
-- Rust 1.70+
-- Java（用于 Minecraft 服务器）
+- Rust 1.70+（仅编译时需要）
+- Java 17+（用于 Minecraft 服务器）
 - tmux（用于会话管理）
 - 可选：Ollama（用于本地 AI）
+
+## Windows 换行符问题
+
+如果在 Windows 上编辑脚本后在 Linux/Termux 上运行报错 `$'\r': command not found`，请转换换行符：
+
+```bash
+# 方法一：使用 dos2unix
+dos2unix *.sh
+
+# 方法二：使用 sed
+sed -i 's/\r$//' *.sh
+```
+
+本项目已在 `.gitattributes` 中配置 `*.sh text eol=lf`，Git 检出时会自动使用 LF 换行符。
+
+## 新版本特性 (v0.3.0)
+
+### 性能优化
+- **RCON 异步化**：使用 tokio 异步网络，不再阻塞事件循环
+- **日志监控优化**：使用 notify 库替代轮询，CPU 占用接近 0
+- **AI 请求限流**：防止 API 过载，同一玩家请求间隔 2 秒
+
+### 用户体验
+- **一键安装**：`install.sh` 自动下载并配置
+- **交互式初始化**：`mc-minder init` 引导配置
+- **自动更新**：`mc-minder self-update` 一键更新
+- **友好错误提示**：详细的错误信息和解决建议
+- **日志轮转**：自动归档超过 50MB 的日志文件
+
+### 配置统一
+- 所有配置集中在 `config.toml`
+- `start.sh` 从配置文件读取内存设置
 
 ## 贡献
 

@@ -1,11 +1,8 @@
 #!/bin/bash
 
-MIN_MEM="512M"
-MAX_MEM="1G"
-SESSION="mc_server"
+CONFIG_FILE="config.toml"
 LOG_FILE="logs/latest.log"
-RUST_BIN="./mc-minder/target/release/mc-minder"
-RUST_CONFIG="./config.toml"
+RUST_BIN="./mc-minder"
 RUST_PID_FILE="/tmp/mc-minder.pid"
 SERVER_PID_FILE="/tmp/mc-server.pid"
 
@@ -27,6 +24,54 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+get_config_value() {
+    local key="$1"
+    local default="$2"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        local line=$(grep -E "^${key}\s*=" "$CONFIG_FILE" 2>/dev/null | head -1)
+        if [ -n "$line" ]; then
+            # 提取等号后的内容
+            local value="${line#*=}"
+            # 去除前导空格
+            value="${value#"${value%%[![:space:]]*}"}"
+            # 去除尾部空格
+            value="${value%"${value##*[![:space:]]}"}"
+            
+            # 检查是否被双引号包围
+            if [[ "$value" == \"*\" ]]; then
+                # 提取引号内的内容（保留内部所有字符）
+                value="${value#\"}"
+                value="${value%\"}"
+                echo "$value"
+                return
+            fi
+            
+            # 没有引号：去除尾部注释（# 后的内容）
+            value="${value%%#*}"
+            # 再次去除尾部空格
+            value="${value%"${value##*[![:space:]]}"}"
+            
+            if [ -n "$value" ]; then
+                echo "$value"
+                return
+            fi
+        fi
+    fi
+    echo "$default"
+}
+
+load_config() {
+    JAR=$(get_config_value "jar" "fabric-server.jar")
+    MIN_MEM=$(get_config_value "min_mem" "512M")
+    MAX_MEM=$(get_config_value "max_mem" "1G")
+    SESSION=$(get_config_value "session_name" "mc_server")
+}
+
+is_termux() {
+    [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]
+}
+
 check_dependencies() {
     local missing=()
     
@@ -35,25 +80,60 @@ check_dependencies() {
     
     if [ ${#missing[@]} -ne 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
-        log_info "Please install them first."
+        
+        if is_termux; then
+            log_info "Detected Termux environment"
+            read -p "Install missing dependencies? (Y/n): " choice
+            case "$choice" in
+                n|N )
+                    log_error "Cannot continue without dependencies"
+                    exit 1
+                    ;;
+                * )
+                    log_info "Installing dependencies..."
+                    pkg install -y openjdk-17 tmux
+                    ;;
+            esac
+        else
+            log_info "Please install missing dependencies:"
+            log_info "  Ubuntu/Debian: sudo apt install openjdk-17-jre tmux"
+            log_info "  CentOS/RHEL:   sudo yum install java-17-openjdk tmux"
+            log_info "  macOS:         brew install openjdk tmux"
+            exit 1
+        fi
+    fi
+}
+
+check_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_error "Config file not found: $CONFIG_FILE"
+        log_info "Run './mc-minder init' to create one"
+        exit 1
+    fi
+}
+
+check_server_jar() {
+    if [ ! -f "$JAR" ]; then
+        log_error "Server jar not found: $JAR"
+        log_info "Please download fabric-server.jar and place it in the current directory"
+        log_info "Visit: https://fabricmc.net/use/installer/"
         exit 1
     fi
 }
 
 check_rust_binary() {
     if [ ! -f "$RUST_BIN" ]; then
-        log_warn "Rust binary not found at $RUST_BIN"
-        log_info "Please compile it first:"
-        log_info "  cd mc-minder && cargo build --release"
-        log_info ""
-        log_info "For Termux/Android (aarch64):"
-        log_info "  cd mc-minder && cargo build --target aarch64-linux-android --release"
+        log_warn "MC-Minder binary not found at $RUST_BIN"
+        log_info "Please download it from GitHub Releases or compile from source:"
+        log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
         return 1
     fi
     return 0
 }
 
 start_background() {
+    load_config
+    
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         log_warn "Session '$SESSION' already exists"
         read -p "Kill existing session and restart? (y/N): " choice
@@ -69,13 +149,16 @@ start_background() {
     fi
     
     log_info "Starting Minecraft server..."
+    log_info "  JAR: $JAR"
+    log_info "  Memory: $MIN_MEM - $MAX_MEM"
+    log_info "  Session: $SESSION"
     
     mkdir -p logs
     
     tmux new-session -d -s "$SESSION" -x 120 -y 30
     
     tmux send-keys -t "$SESSION" "cd '$(pwd)'" Enter
-    tmux send-keys -t "$SESSION" "java -Xms$MIN_MEM -Xmx$MAX_MEM -jar fabric-server.jar nogui" Enter
+    tmux send-keys -t "$SESSION" "java -Xms$MIN_MEM -Xmx$MAX_MEM -jar $JAR nogui" Enter
     
     echo $! > "$SERVER_PID_FILE"
     
@@ -87,7 +170,7 @@ start_background() {
     if check_rust_binary; then
         log_info "Starting MC-Minder..."
         
-        nohup "$RUST_BIN" --config "$RUST_CONFIG" >> logs/mc-minder.log 2>&1 &
+        nohup "$RUST_BIN" --config "$CONFIG_FILE" >> logs/mc-minder.log 2>&1 &
         RUST_PID=$!
         echo $RUST_PID > "$RUST_PID_FILE"
         
@@ -107,7 +190,7 @@ start_background() {
                     if ! kill -0 "$RUST_PID" 2>/dev/null; then
                         log_warn "MC-Minder died, restarting..."
                         if check_rust_binary; then
-                            nohup "$RUST_BIN" --config "$RUST_CONFIG" >> logs/mc-minder.log 2>&1 &
+                            nohup "$RUST_BIN" --config "$CONFIG_FILE" >> logs/mc-minder.log 2>&1 &
                             echo $! > "$RUST_PID_FILE"
                         fi
                     fi
@@ -141,6 +224,8 @@ stop_server() {
         log_info "MC-Minder stopped"
     fi
     
+    load_config
+    
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         log_info "Sending 'stop' command to server..."
         tmux send-keys -t "$SESSION" "stop" Enter
@@ -166,6 +251,8 @@ stop_server() {
 }
 
 status_server() {
+    load_config
+    
     echo ""
     echo "MC-Minder Status"
     echo "================"
@@ -202,6 +289,8 @@ status_server() {
 }
 
 attach_server() {
+    load_config
+    
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         log_info "Attaching to server session..."
         log_info "Press Ctrl+B then D to detach"
@@ -217,12 +306,25 @@ show_logs() {
         tail -n 50 "$LOG_FILE"
     else
         log_error "Log file not found: $LOG_FILE"
+        log_info "Start the server first to generate logs"
+    fi
+}
+
+show_minder_logs() {
+    local minder_log="logs/mc-minder.log"
+    if [ -f "$minder_log" ]; then
+        log_info "Showing last 50 lines of MC-Minder log..."
+        tail -n 50 "$minder_log"
+    else
+        log_error "MC-Minder log file not found"
     fi
 }
 
 case "${1:-}" in
     start)
         check_dependencies
+        check_config
+        check_server_jar
         start_background
         ;;
     stop)
@@ -232,6 +334,8 @@ case "${1:-}" in
         stop_server
         sleep 2
         check_dependencies
+        check_config
+        check_server_jar
         start_background
         ;;
     status)
@@ -243,25 +347,39 @@ case "${1:-}" in
     logs|l)
         show_logs
         ;;
-    compile)
-        log_info "Compiling MC-Minder..."
-        cd mc-minder
-        cargo build --release
-        cd ..
-        log_info "Compilation complete!"
+    minder-logs|ml)
+        show_minder_logs
+        ;;
+    init)
+        if [ -f "$RUST_BIN" ]; then
+            "$RUST_BIN" init
+        else
+            log_error "MC-Minder binary not found"
+            exit 1
+        fi
+        ;;
+    update)
+        if [ -f "$RUST_BIN" ]; then
+            "$RUST_BIN" self-update
+        else
+            log_error "MC-Minder binary not found"
+            exit 1
+        fi
         ;;
     *)
-        echo "MC-Minder - Minecraft Server Manager"
+        echo "MC-Minder - Minecraft Server Manager v0.3.0"
         echo ""
-        echo "Usage: $0 {start|stop|restart|status|attach|logs|compile}"
+        echo "Usage: $0 {start|stop|restart|status|attach|logs|init|update}"
         echo ""
         echo "Commands:"
-        echo "  start    Start the server and MC-Minder"
-        echo "  stop     Stop everything"
-        echo "  restart  Restart everything"
-        echo "  status   Show status"
-        echo "  attach   Attach to server console"
-        echo "  logs     Show recent server logs"
-        echo "  compile  Compile the Rust binary"
+        echo "  start        Start the server and MC-Minder"
+        echo "  stop         Stop everything"
+        echo "  restart      Restart everything"
+        echo "  status       Show status"
+        echo "  attach (a)   Attach to server console"
+        echo "  logs (l)     Show recent server logs"
+        echo "  minder-logs  Show MC-Minder logs"
+        echo "  init         Initialize configuration"
+        echo "  update       Update MC-Minder to latest version"
         ;;
 esac

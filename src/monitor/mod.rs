@@ -1,10 +1,11 @@
-use anyhow::{Result, Context};
-use log::{info, debug};
+use anyhow::{Context, Result};
+use log::{info, debug, warn};
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::time::{interval, Duration};
+use tokio::sync::mpsc::Receiver;
 
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
@@ -19,6 +20,33 @@ pub struct LogMonitor {
     join_pattern: Regex,
     leave_pattern: Regex,
     death_pattern: Regex,
+}
+
+#[derive(Debug, Clone)]
+pub enum LogEvent {
+    Chat(ChatMessage),
+    PlayerJoin(String),
+    PlayerLeave(String),
+    PlayerDeath(String),
+    ServerStart,
+    ServerStop,
+}
+
+/// 文件标识，用于检测文件轮转
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileId {
+    size: u64,
+    modified_secs: i64,
+}
+
+impl FileId {
+    /// 从文件元数据创建文件标识
+    fn from_metadata(metadata: &std::fs::Metadata) -> Option<Self> {
+        let size = metadata.len();
+        let modified = metadata.modified().ok()?;
+        let modified_secs = modified.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
+        Some(Self { size, modified_secs })
+    }
 }
 
 impl LogMonitor {
@@ -44,84 +72,168 @@ impl LogMonitor {
         })
     }
 
-    pub async fn start_monitoring(
-        self,
-        tx: mpsc::Sender<LogEvent>,
-        shutdown: Arc<tokio::sync::Notify>,
-    ) -> Result<()> {
-        info!("Started monitoring log file: {:?}", self.log_path);
+    pub fn start_monitoring(self) -> Result<Receiver<LogEvent>> {
+        let (tx, rx) = mpsc::channel(100);
+        
+        let log_path = self.log_path.clone();
+        let log_path_for_watcher = self.log_path.clone();
+        
+        info!("Started monitoring log file: {:?}", log_path);
 
-        let mut last_size = std::fs::metadata(&self.log_path)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let mut last_offset: u64 = 0;
+        let mut last_file_id: Option<FileId> = None;
 
-        let mut poll_interval = interval(Duration::from_millis(500));
+        if log_path.exists() {
+            if let Ok(metadata) = std::fs::metadata(&log_path) {
+                last_offset = metadata.len();
+                last_file_id = FileId::from_metadata(&metadata);
+            }
+        } else {
+            warn!(
+                "Log file not found: {:?}. \n\
+                 Please start the Minecraft server first to generate the log file.",
+                log_path
+            );
+        }
 
-        loop {
-            tokio::select! {
-                _ = shutdown.notified() => {
-                    info!("Log monitor shutting down");
-                    break;
+        let (notify_tx, mut notify_rx) = std::sync::mpsc::channel();
+        
+        let mut watcher = RecommendedWatcher::new(
+            move |res: Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    let _ = notify_tx.send(event);
                 }
-                
-                _ = poll_interval.tick() => {
-                    match self.check_for_new_content(&mut last_size) {
-                        Ok(Some(events)) => {
-                            for log_event in events {
-                                if tx.send(log_event).await.is_err() {
-                                    debug!("Receiver dropped, stopping monitor");
-                                    return Ok(());
+            },
+            Config::default(),
+        ).context("Failed to create file watcher")?;
+
+        let parent_dir = log_path_for_watcher
+            .parent()
+            .context("Log file has no parent directory")?;
+        
+        watcher
+            .watch(parent_dir, RecursiveMode::NonRecursive)
+            .context("Failed to watch log directory")?;
+
+        let patterns = (
+            self.chat_pattern,
+            self.join_pattern,
+            self.leave_pattern,
+            self.death_pattern,
+        );
+
+        std::thread::spawn(move || {
+            loop {
+                match notify_rx.recv() {
+                    Ok(event) => {
+                        if !event.paths.iter().any(|p| p.file_name().map(|n| n == "latest.log").unwrap_or(false)) {
+                            continue;
+                        }
+
+                        match event.kind {
+                            EventKind::Modify(_) | EventKind::Create(_) => {
+                                if let Ok(events) = Self::check_file_changes(
+                                    &log_path,
+                                    &mut last_offset,
+                                    &mut last_file_id,
+                                    &patterns,
+                                ) {
+                                    for log_event in events {
+                                        if tx.blocking_send(log_event).is_err() {
+                                            debug!("Receiver dropped, stopping monitor");
+                                            return;
+                                        }
+                                    }
                                 }
                             }
+                            EventKind::Remove(_) => {
+                                debug!("Log file removed/rotated, resetting state");
+                                last_offset = 0;
+                                last_file_id = None;
+                            }
+                            _ => {}
                         }
-                        Ok(None) => {}
-                        Err(e) => {
-                            debug!("Error checking log content: {}", e);
-                        }
+                    }
+                    Err(_) => {
+                        debug!("Notify channel closed, stopping monitor");
+                        break;
                     }
                 }
             }
-        }
+            let _ = watcher.unwatch(parent_dir);
+        });
 
-        Ok(())
+        Ok(rx)
     }
 
-    fn check_for_new_content(&self, last_size: &mut u64) -> Result<Option<Vec<LogEvent>>> {
-        let metadata = std::fs::metadata(&self.log_path)?;
+    fn check_file_changes(
+        log_path: &PathBuf,
+        last_offset: &mut u64,
+        last_file_id: &mut Option<FileId>,
+        patterns: &(Regex, Regex, Regex, Regex),
+    ) -> Result<Vec<LogEvent>> {
+        // 检查文件是否存在
+        if !log_path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let metadata = std::fs::metadata(log_path)?;
+        let current_file_id = FileId::from_metadata(&metadata);
+
+        // 检测文件轮转：如果文件标识变化，重置偏移量
+        if let (Some(current), Some(last)) = (current_file_id, *last_file_id) {
+            if current != last {
+                debug!("File rotation detected, resetting offset");
+                *last_offset = 0;
+            }
+        }
+
         let current_size = metadata.len();
 
-        if current_size < *last_size {
-            *last_size = 0;
-            return Ok(None);
+        // 如果文件变小了，说明可能被截断或轮转，重置偏移量
+        if current_size < *last_offset {
+            debug!("File size decreased, resetting offset");
+            *last_offset = 0;
         }
 
-        if current_size == *last_size {
-            return Ok(None);
+        // 没有新内容
+        if current_size == *last_offset {
+            return Ok(Vec::new());
         }
 
-        let new_bytes = current_size - *last_size;
-        let file = std::fs::File::open(&self.log_path)?;
-        use std::io::{Read, Seek, SeekFrom};
-        let mut reader = std::io::BufReader::new(file);
-        reader.seek(SeekFrom::End(-(new_bytes as i64)))?;
+        // 从 last_offset 位置读取到文件末尾
+        let new_content = Self::read_from_offset(log_path, *last_offset, current_size)?;
 
-        let mut new_content = String::new();
-        reader.read_to_string(&mut new_content)?;
-        *last_size = current_size;
+        // 更新状态
+        *last_offset = current_size;
+        *last_file_id = current_file_id;
 
-        let events = self.parse_lines(&new_content);
-        if events.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(events))
-        }
+        let events = Self::parse_lines(&new_content, patterns);
+        Ok(events)
     }
 
-    fn parse_lines(&self, content: &str) -> Vec<LogEvent> {
+    /// 从指定偏移量读取文件内容
+    fn read_from_offset(log_path: &PathBuf, offset: u64, end: u64) -> Result<String> {
+        use std::fs::File;
+        use std::io::{Read, Seek, SeekFrom};
+
+        let mut file = File::open(log_path)?;
+        file.seek(SeekFrom::Start(offset))?;
+
+        let bytes_to_read = (end - offset) as usize;
+        let mut buffer = Vec::with_capacity(bytes_to_read);
+        file.take(bytes_to_read as u64).read_to_end(&mut buffer)?;
+
+        String::from_utf8(buffer)
+            .context("Failed to convert file content to UTF-8 string")
+    }
+
+    fn parse_lines(content: &str, patterns: &(Regex, Regex, Regex, Regex)) -> Vec<LogEvent> {
+        let (chat_pattern, join_pattern, leave_pattern, death_pattern) = patterns;
         let mut events = Vec::new();
         
         for line in content.lines() {
-            if let Some(caps) = self.chat_pattern.captures(line) {
+            if let Some(caps) = chat_pattern.captures(line) {
                 if let (Some(player), Some(content)) = (caps.get(2), caps.get(3)) {
                     events.push(LogEvent::Chat(ChatMessage {
                         player: player.as_str().to_string(),
@@ -129,15 +241,15 @@ impl LogMonitor {
                         timestamp: chrono::Local::now(),
                     }));
                 }
-            } else if let Some(caps) = self.join_pattern.captures(line) {
+            } else if let Some(caps) = join_pattern.captures(line) {
                 if let Some(player) = caps.get(2) {
                     events.push(LogEvent::PlayerJoin(player.as_str().to_string()));
                 }
-            } else if let Some(caps) = self.leave_pattern.captures(line) {
+            } else if let Some(caps) = leave_pattern.captures(line) {
                 if let Some(player) = caps.get(2) {
                     events.push(LogEvent::PlayerLeave(player.as_str().to_string()));
                 }
-            } else if let Some(caps) = self.death_pattern.captures(line) {
+            } else if let Some(caps) = death_pattern.captures(line) {
                 if let Some(player) = caps.get(2) {
                     events.push(LogEvent::PlayerDeath(player.as_str().to_string()));
                 }
@@ -146,14 +258,4 @@ impl LogMonitor {
         
         events
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum LogEvent {
-    Chat(ChatMessage),
-    PlayerJoin(String),
-    PlayerLeave(String),
-    PlayerDeath(String),
-    ServerStart,
-    ServerStop,
 }

@@ -1,8 +1,32 @@
 #!/bin/bash
 
-WORLD_DIR="world"
-BACKUP_DEST="../backups"
-RETAIN_DAYS=7
+CONFIG_FILE="config.toml"
+
+get_config_value() {
+    local key="$1"
+    local default="$2"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        local line=$(grep -E "^${key}\s*=" "$CONFIG_FILE" 2>/dev/null | head -1)
+        if [ -n "$line" ]; then
+            local value="${line#*=}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            if [[ "$value" == \"*\" ]]; then
+                value="${value#\"}"
+                value="${value%\"}"
+            fi
+            echo "$value"
+            return
+        fi
+    fi
+    echo "$default"
+}
+
+# 从 config.toml 读取配置，若未配置则使用默认值
+WORLD_DIR=$(get_config_value "world_dir" "world")
+BACKUP_DEST=$(get_config_value "backup_dest" "../backups")
+RETAIN_DAYS=$(get_config_value "retain_days" "7")
 BACKUP_NAME="mc-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
 
 RED='\033[0;31m'

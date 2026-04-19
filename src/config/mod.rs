@@ -8,6 +8,8 @@ pub struct Config {
     pub ai: Option<AiConfig>,
     pub ollama: Option<OllamaConfig>,
     #[serde(default)]
+    pub server: ServerConfig,
+    #[serde(default)]
     pub backup: BackupConfig,
     #[serde(default)]
     pub notification: NotificationConfig,
@@ -24,6 +26,38 @@ pub struct RconConfig {
 
 fn default_rcon_host() -> String { "127.0.0.1".to_string() }
 fn default_rcon_port() -> u16 { 25575 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ServerConfig {
+    #[serde(default = "default_jar")]
+    pub jar: String,
+    #[serde(default = "default_min_mem")]
+    pub min_mem: String,
+    #[serde(default = "default_max_mem")]
+    pub max_mem: String,
+    #[serde(default = "default_session_name")]
+    pub session_name: String,
+    #[serde(default = "default_log_file")]
+    pub log_file: String,
+}
+
+fn default_jar() -> String { "fabric-server.jar".to_string() }
+fn default_min_mem() -> String { "512M".to_string() }
+fn default_max_mem() -> String { "1G".to_string() }
+fn default_session_name() -> String { "mc_server".to_string() }
+fn default_log_file() -> String { "logs/latest.log".to_string() }
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            jar: default_jar(),
+            min_mem: default_min_mem(),
+            max_mem: default_max_mem(),
+            session_name: default_session_name(),
+            log_file: default_log_file(),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AiConfig {
@@ -109,7 +143,11 @@ impl Config {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {:?}", path))?;
         
-        let mut config: Config = toml::from_str(&content)
+        Self::load_from_str(&content)
+    }
+
+    pub fn load_from_str(content: &str) -> Result<Self> {
+        let mut config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config file")?;
         
         if let Some(ref ai) = config.ai {
@@ -121,16 +159,56 @@ impl Config {
         Ok(config)
     }
 
-    pub fn load_from_str(content: &str) -> Result<Self> {
-        let mut config: Config = toml::from_str(content)
-            .with_context(|| "Failed to parse config content")?;
-        
-        if let Some(ref ai) = config.ai {
-            if ai.api_key.is_empty() || ai.api_url.is_empty() {
-                config.ai = None;
-            }
-        }
-        
-        Ok(config)
+    pub fn generate_template() -> String {
+        r#"# MC-Minder Configuration File
+# MC-Minder 配置文件
+
+# Server Configuration
+# 服务器配置
+[server]
+jar = "fabric-server.jar"
+min_mem = "512M"
+max_mem = "1G"
+session_name = "mc_server"
+log_file = "logs/latest.log"
+
+# RCON Configuration - Required for MC-Minder to communicate with Minecraft server
+# RCON 配置 - MC-Minder 与 Minecraft 服务器通信必需
+[rcon]
+host = "127.0.0.1"
+port = 25575
+password = "your_rcon_password"
+
+# AI Configuration - Leave empty or remove this section to disable AI features
+# AI 配置 - 留空或删除此部分可禁用 AI 功能
+[ai]
+api_url = ""
+api_key = ""
+model = "gpt-3.5-turbo"
+trigger = "!"
+max_tokens = 150
+temperature = 0.7
+
+# Ollama Configuration - Set enabled = true to use local AI
+# Ollama 配置 - 设置 enabled = true 使用本地 AI
+[ollama]
+enabled = false
+url = "http://localhost:11434/api/generate"
+model = "qwen:0.5b"
+
+# Backup Configuration
+# 备份配置
+[backup]
+world_dir = "world"
+backup_dest = "../backups"
+retain_days = 7
+
+# Notification Configuration - Leave empty to disable notifications
+# 通知配置 - 留空禁用通知功能
+[notification]
+telegram_bot_token = ""
+telegram_chat_id = ""
+termux_notify = true
+"#.to_string()
     }
 }

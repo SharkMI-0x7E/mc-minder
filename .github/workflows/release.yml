@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-unknown-linux-musl
+          - x86_64-unknown-linux-musl
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools for aarch64
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Install musl tools for x86_64
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --target ${{ matrix.target }} --release
+
+      - name: Rename binary
+        run: mv target/${{ matrix.target }}/release/mc-minder mc-minder-${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-${{ matrix.target }}
+          path: mc-minder-${{ matrix.target }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download aarch64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mc-minder-aarch64-unknown-linux-musl
+          path: ./binaries
+
+      - name: Download x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mc-minder-x86_64-unknown-linux-musl
+          path: ./binaries
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: MC-Minder ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## MC-Minder ${{ steps.get_version.outputs.VERSION }}
+            
+            ### 下载
+            | 平台 | 文件 |
+            |------|------|
+            | ARM64 Linux (Termux/Android) | `mc-minder-aarch64-unknown-linux-musl` |
+            | x64 Linux | `mc-minder-x86_64-unknown-linux-musl` |
+            
+            ### 安装
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
+            ```
+          files: |
+            binaries/mc-minder-aarch64-unknown-linux-musl
+            binaries/mc-minder-x86_64-unknown-linux-musl
+            install.sh
+          draft: false
+          prerelease: false
