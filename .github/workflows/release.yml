@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build Release Binaries
+  build-linux-x86_64:
+    name: Build Linux x86_64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -27,16 +27,61 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-x86_64-cargo-
 
-      - name: Build release binary (native x86_64)
+      - name: Build release binary
         run: cargo build --release
 
-      - name: Rename and prepare binary
+      - name: Rename binary
         run: |
           mv target/release/mc-minder mc-minder-x86_64-linux
           chmod +x mc-minder-x86_64-linux
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-x86_64-linux
+          path: mc-minder-x86_64-linux
+
+  build-termux-aarch64:
+    name: Build Termux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Build for aarch64-linux-android
+        run: cross build --target aarch64-linux-android --release
+
+      - name: Rename binary
+        run: |
+          mv target/aarch64-linux-android/release/mc-minder mc-minder-termux-aarch64
+          chmod +x mc-minder-termux-aarch64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-termux-aarch64
+          path: mc-minder-termux-aarch64
+
+  release:
+    needs: [build-linux-x86_64, build-termux-aarch64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./binaries
 
       - name: Get version from tag
         id: get_version
@@ -63,19 +108,15 @@ jobs:
             | 平台 | 文件 |
             |------|------|
             | Linux x64 | `mc-minder-x86_64-linux` |
-            
-            ### 其他平台
-            对于 Termux/Android 或其他架构，请从源码编译：
-            ```bash
-            cargo build --release
-            ```
+            | Termux/Android ARM64 | `mc-minder-termux-aarch64` |
             
             ### 安装
             ```bash
             curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
             ```
           files: |
-            mc-minder-x86_64-linux
+            binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
+            binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
             install.sh
           draft: false
           prerelease: false
