@@ -66,12 +66,13 @@ jobs:
           key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-aarch64-cargo-
 
+      - name: Install cross via binstall
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y cross
+
       - name: Build for Android ARM64
-        uses: cross-rs/cross@main
-        with:
-          command: build
-          target: aarch64-linux-android
-          args: --release
+        run: cross build --target aarch64-linux-android --release
 
       - name: Rename binary
         run: |
