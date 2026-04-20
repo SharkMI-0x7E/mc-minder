@@ -488,13 +488,14 @@ async fn send_telegram_notification(
 
     match client.post(&url).json(&payload).send().await {
         Ok(response) => {
-            if response.status().is_success() {
+            let status = response.status();
+            if status.is_success() {
                 info!("Telegram notification sent successfully");
             } else {
                 if let Ok(text) = response.text().await {
-                    warn!("Telegram API error ({}): {}", response.status(), text);
+                    warn!("Telegram API error ({}): {}", status, text);
                 } else {
-                    warn!("Telegram API error: HTTP {}", response.status());
+                    warn!("Telegram API error: HTTP {}", status);
                 }
             }
         }
