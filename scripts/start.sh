@@ -378,7 +378,7 @@ case "${1:-}" in
         fi
         ;;
     *)
-        echo "MC-Minder - Minecraft 服务器管理器 v0.3.3"
+        echo "MC-Minder - Minecraft 服务器管理器 v0.3.4"
         echo ""
         echo "用法: $0 {start|stop|restart|status|attach|logs|init|update}"
         echo ""
