@@ -13,6 +13,8 @@ pub struct Config {
     pub backup: BackupConfig,
     #[serde(default)]
     pub notification: NotificationConfig,
+    #[serde(default)]
+    pub jvm: JvmConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -138,6 +140,31 @@ impl Default for NotificationConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct JvmConfig {
+    #[serde(default = "default_gc")]
+    pub gc: String,
+    #[serde(default)]
+    pub extra_flags: String,
+    #[serde(default)]
+    pub xmx: Option<String>,
+    #[serde(default)]
+    pub xms: Option<String>,
+}
+
+fn default_gc() -> String { "G1GC".to_string() }
+
+impl Default for JvmConfig {
+    fn default() -> Self {
+        Self {
+            gc: default_gc(),
+            extra_flags: String::new(),
+            xmx: None,
+            xms: None,
+        }
+    }
+}
+
 impl Config {
     pub fn load(path: &PathBuf) -> Result<Self> {
         let content = std::fs::read_to_string(path)
@@ -209,6 +236,14 @@ retain_days = 7
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
+
+# JVM Configuration - Advanced JVM tuning options
+# JVM 配置 - 高级 JVM 调优选项
+[jvm]
+gc = "G1GC"
+extra_flags = ""
+# xmx = "2G"  # Uncomment to override server.max_mem
+# xms = "512M"  # Uncomment to override server.min_mem
 "#.to_string()
     }
 }

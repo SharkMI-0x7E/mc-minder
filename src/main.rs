@@ -29,7 +29,7 @@ const LOG_FILE_MAX_SIZE: u64 = 50 * 1024 * 1024;
 #[derive(Parser, Debug)]
 #[command(name = "mc-minder")]
 #[command(author = "SharkMI-0x7E")]
-#[command(version = "0.3.1")]
+#[command(version = "0.3.4")]
 #[command(about = "A smart management suite for Minecraft Fabric servers")]
 struct Args {
     #[command(subcommand)]
@@ -463,6 +463,47 @@ fn get_config_value(path: &PathBuf, key: &str) -> Result<()> {
     Ok(())
 }
 
+/// 发送 Telegram 通知
+async fn send_telegram_notification(
+    client: &reqwest::Client,
+    config: &Config,
+    message: &str,
+) {
+    // 检查 Telegram 配置是否为空
+    let bot_token = &config.notification.telegram_bot_token;
+    let chat_id = &config.notification.telegram_chat_id;
+
+    if bot_token.is_empty() || chat_id.is_empty() {
+        debug!("Telegram notification skipped: bot_token or chat_id is empty");
+        return;
+    }
+
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
+
+    let payload = serde_json::json!({
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    });
+
+    match client.post(&url).json(&payload).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                info!("Telegram notification sent successfully");
+            } else {
+                if let Ok(text) = response.text().await {
+                    warn!("Telegram API error ({}): {}", response.status(), text);
+                } else {
+                    warn!("Telegram API error: HTTP {}", response.status());
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Failed to send Telegram notification: {}", e);
+        }
+    }
+}
+
 async fn run_server(args: Args) -> Result<()> {
     info!("MC-Minder starting up...");
 
@@ -471,6 +512,9 @@ async fn run_server(args: Args) -> Result<()> {
         .with_context(|| format!("Failed to load config from {:?}", config_path))?;
 
     info!("Configuration loaded successfully");
+
+    // 创建 HTTP 客户端用于 Telegram 通知
+    let http_client = reqwest::Client::new();
 
     let log_path = PathBuf::from(&config.server.log_file);
     let log_monitor = LogMonitor::new(log_path)?;
@@ -572,18 +616,45 @@ async fn run_server(args: Args) -> Result<()> {
                         if let Some(ref mut rcon_client) = *rcon_guard {
                             let _ = rcon_client.say(&format!("Welcome {}!", player)).await;
                         }
+                        // 发送 Telegram 通知：玩家加入
+                        let join_message = format!(
+                            "*MC-Minder Alert*\n\nPlayer *{}* joined the game",
+                            player
+                        );
+                        send_telegram_notification(&http_client, &config, &join_message).await;
                     }
                     LogEvent::PlayerLeave(player) => {
                         info!("[Leave] {} left the game", player);
+                        // 发送 Telegram 通知：玩家离开
+                        let leave_message = format!(
+                            "*MC-Minder Alert*\n\nPlayer *{}* left the game",
+                            player
+                        );
+                        send_telegram_notification(&http_client, &config, &leave_message).await;
                     }
                     LogEvent::PlayerDeath(player) => {
                         info!("[Death] {} died", player);
                     }
                     LogEvent::ServerStart => {
                         info!("[Server] Server started");
+                        // 发送 Telegram 通知：服务器启动
+                        let version = env!("CARGO_PKG_VERSION");
+                        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        let start_message = format!(
+                            "*MC-Minder Alert*\n\nServer *Started* successfully!\n\nVersion: `{}`\nTime: `{}`",
+                            version, timestamp
+                        );
+                        send_telegram_notification(&http_client, &config, &start_message).await;
                     }
                     LogEvent::ServerStop => {
                         info!("[Server] Server stopped");
+                        // 发送 Telegram 通知：服务器停止
+                        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        let stop_message = format!(
+                            "*MC-Minder Alert*\n\nServer *Stopped*!\n\nTime: `{}`",
+                            timestamp
+                        );
+                        send_telegram_notification(&http_client, &config, &stop_message).await;
                     }
                 }
             }
