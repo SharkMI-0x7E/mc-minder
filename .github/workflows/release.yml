@@ -4,19 +4,21 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  build-linux:
     name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target:
-          - x86_64-unknown-linux-musl
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,19 +28,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl tools
+      - name: Install cross-compilation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
-
-      - name: Configure cargo for musl target
-        run: |
-          mkdir -p ~/.cargo
-          echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml
-          echo 'linker = "musl-gcc"' >> ~/.cargo/config.toml
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu
 
       - name: Build release binary
         run: cargo build --target ${{ matrix.target }} --release
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Rename binary
         run: |
@@ -51,17 +49,58 @@ jobs:
           name: mc-minder-${{ matrix.target }}
           path: mc-minder-${{ matrix.target }}
 
-  release:
-    needs: build
+  build-termux:
+    name: Build for Termux (aarch64-linux-android)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download x86_64 artifact
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android NDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+          unzip -q android-ndk-r26b-linux.zip
+          echo "NDK_HOME=$(pwd)/android-ndk-r26b" >> $GITHUB_ENV
+
+      - name: Configure cargo for Android
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << 'EOF'
+          [target.aarch64-linux-android]
+          linker = "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          EOF
+
+      - name: Build release binary
+        run: cargo build --target aarch64-linux-android --release
+
+      - name: Rename binary
+        run: |
+          mv target/aarch64-linux-android/release/mc-minder mc-minder-termux-aarch64
+          chmod +x mc-minder-termux-aarch64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-termux-aarch64
+          path: mc-minder-termux-aarch64
+
+  release:
+    needs: [build-linux, build-termux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: mc-minder-x86_64-unknown-linux-musl
           path: ./binaries
 
       - name: Get version from tag
@@ -88,14 +127,18 @@ jobs:
             ### 下载
             | 平台 | 文件 |
             |------|------|
-            | x64 Linux | `mc-minder-x86_64-unknown-linux-musl` |
+            | Linux x64 | `mc-minder-x86_64-unknown-linux-gnu` |
+            | Linux ARM64 | `mc-minder-aarch64-unknown-linux-gnu` |
+            | Termux/Android ARM64 | `mc-minder-termux-aarch64` |
             
             ### 安装
             ```bash
             curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
             ```
           files: |
-            binaries/mc-minder-x86_64-unknown-linux-musl
+            binaries/mc-minder-x86_64-unknown-linux-gnu/mc-minder-x86_64-unknown-linux-gnu
+            binaries/mc-minder-aarch64-unknown-linux-gnu/mc-minder-aarch64-unknown-linux-gnu
+            binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
             install.sh
           draft: false
           prerelease: false
