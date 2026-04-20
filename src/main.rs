@@ -474,7 +474,7 @@ async fn send_telegram_notification(
     let chat_id = &config.notification.telegram_chat_id;
 
     if bot_token.is_empty() || chat_id.is_empty() {
-        debug!("Telegram notification skipped: bot_token or chat_id is empty");
+        warn!("Telegram notification skipped: bot_token or chat_id is empty");
         return;
     }
 
