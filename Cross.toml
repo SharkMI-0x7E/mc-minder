@@ -1,0 +1,7 @@
+[build.env]
+passthrough = [
+    "RUSTFLAGS",
+]
+
+[target.aarch64-linux-android]
+image = "ghcr.io/cross-rs/aarch64-linux-android:0.2.5"
