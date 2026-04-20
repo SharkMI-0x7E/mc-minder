@@ -66,13 +66,12 @@ jobs:
           key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-aarch64-cargo-
 
-      - name: Install cross (prebuilt)
-        run: |
-          curl -sSL https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-gnu.tar.gz | tar -xzf - -C ~/.cargo/bin
-          chmod +x ~/.cargo/bin/cross
-
       - name: Build for Android ARM64
-        run: cross build --target aarch64-linux-android --release
+        uses: cross-rs/cross@main
+        with:
+          command: build
+          target: aarch64-linux-android
+          args: --release
 
       - name: Rename binary
         run: |
