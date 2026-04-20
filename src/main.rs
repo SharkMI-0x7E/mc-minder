@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
 }
 
 fn print_banner() {
-    println!("{}", "MC-Minder v0.3.2".green().bold());
+    println!("{}", format!("MC-Minder v{}", env!("CARGO_PKG_VERSION")).green().bold());
     println!("{}", "A smart management suite for Minecraft Fabric servers".dimmed());
     println!();
 }
@@ -123,7 +123,7 @@ fn init_logger(verbose: bool) -> Result<()> {
         .filter_level(log_level)
         .format(|buf, record| {
             use std::io::Write;
-            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %z");
             writeln!(buf, "[{} {}] {}", timestamp, record.level(), record.args())
         })
         .target(env_logger::Target::Pipe(Box::new(file)))

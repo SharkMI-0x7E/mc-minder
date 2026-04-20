@@ -133,7 +133,6 @@ sed -i 's/\r$//' *.sh
 ```bash
 # Copy scripts to server root
 cp mc-minder/scripts/start.sh ./
-cp mc-minder/scripts/start_en.sh ./  # English version
 
 # Start
 ./start.sh start
@@ -189,8 +188,7 @@ mc-minder/
 ├── LICENSE                 # MIT License
 ├── .gitignore
 ├── scripts/
-│   ├── start.sh            # Startup script (Chinese)
-│   ├── start_en.sh         # Startup script (English)
+│   ├── start.sh            # Startup script
 │   └── backup.sh           # Backup utility
 └── src/
     ├── main.rs             # Main entry point

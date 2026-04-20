@@ -27,7 +27,7 @@ detect_arch() {
     
     case "$os" in
         Linux)
-            if [ -f "/system/bin/app_process" ] || [ -n "$TERMUX_VERSION" ]; then
+            if [ -n "$TERMUX_VERSION" ] || [ -f "/system/bin/app_process" ]; then
                 echo "aarch64-linux-android"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
                 echo "aarch64-unknown-linux-musl"

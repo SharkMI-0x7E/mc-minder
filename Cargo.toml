@@ -1,6 +1,6 @@
 [package]
 name = "mc-minder"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A smart management suite for Minecraft Fabric servers on Termux/Android"
@@ -13,7 +13,7 @@ keywords = ["minecraft", "server", "management", "rcon", "ai"]
 categories = ["command-line-utilities", "games"]
 
 [dependencies]
-tokio = { version = "1.35", features = ["full", "signal", "process"] }
+tokio = { version = "1.44", features = ["full", "signal", "process"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 log = "0.4"
@@ -28,10 +28,9 @@ chrono = { version = "0.4", features = ["serde"] }
 parking_lot = "0.12"
 byteorder = "1.5"
 warp = "0.3"
-notify = "6.1"
+notify = "8.2"
 colored = "2.1"
 dialoguer = "0.11"
-indicatif = "0.17"
 
 [profile.release]
 opt-level = 3

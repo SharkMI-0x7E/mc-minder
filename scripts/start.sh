@@ -24,27 +24,45 @@ log_error() {
     echo -e "${RED}[错误]${NC} $1"
 }
 
+# 优化的配置读取：优先使用 mc-minder 二进制，失败时回退到 grep 解析
+get_config() {
+    local key="$1"
+    local default="$2"
+
+    # 尝试使用 mc-minder 二进制获取配置
+    if [ -f "$RUST_BIN" ]; then
+        local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
+        if [ -n "$value" ] && [ "$value" != "Error" ] && [ "$value" != "" ]; then
+            echo "$value"
+            return
+        fi
+    fi
+
+    # 回退到 grep 解析
+    get_config_value "$key" "$default"
+}
+
 get_config_value() {
     local key="$1"
     local default="$2"
-    
+
     if [ -f "$CONFIG_FILE" ]; then
         local line=$(grep -E "^${key}\s*=" "$CONFIG_FILE" 2>/dev/null | head -1)
         if [ -n "$line" ]; then
             local value="${line#*=}"
             value="${value#"${value%%[![:space:]]*}"}"
             value="${value%"${value##*[![:space:]]}"}"
-            
+
             if [[ "$value" == \"*\" ]]; then
                 value="${value#\"}"
                 value="${value%\"}"
                 echo "$value"
                 return
             fi
-            
+
             value="${value%%#*}"
             value="${value%"${value##*[![:space:]]}"}"
-            
+
             if [ -n "$value" ]; then
                 echo "$value"
                 return
@@ -55,10 +73,10 @@ get_config_value() {
 }
 
 load_config() {
-    JAR=$(get_config_value "jar" "fabric-server.jar")
-    MIN_MEM=$(get_config_value "min_mem" "512M")
-    MAX_MEM=$(get_config_value "max_mem" "1G")
-    SESSION=$(get_config_value "session_name" "mc_server")
+    JAR=$(get_config "jar" "fabric-server.jar")
+    MIN_MEM=$(get_config "min_mem" "512M")
+    MAX_MEM=$(get_config "max_mem" "1G")
+    SESSION=$(get_config "session_name" "mc_server")
 }
 
 is_termux() {
@@ -360,7 +378,7 @@ case "${1:-}" in
         fi
         ;;
     *)
-        echo "MC-Minder - Minecraft 服务器管理器 v0.3.2"
+        echo "MC-Minder - Minecraft 服务器管理器 v0.3.3"
         echo ""
         echo "用法: $0 {start|stop|restart|status|attach|logs|init|update}"
         echo ""
