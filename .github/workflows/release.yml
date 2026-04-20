@@ -53,12 +53,39 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
 
-      - name: Install cross
-        run: cargo install cross --locked
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-cargo-
 
-      - name: Build for aarch64-linux-android
-        run: cross build --target aarch64-linux-android --release
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25b
+          add-to-path: false
+
+      - name: Configure cross-compilation
+        run: |
+          mkdir -p .cargo
+          NDK="${{ steps.setup-ndk.outputs.ndk-path }}"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          cat > .cargo/config.toml << EOF
+          [target.aarch64-linux-android]
+          linker = "$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          ar = "$TOOLCHAIN/bin/llvm-ar"
+          EOF
+
+      - name: Build for Android ARM64
+        run: cargo build --target aarch64-linux-android --release
 
       - name: Rename binary
         run: |
