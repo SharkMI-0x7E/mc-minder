@@ -66,26 +66,13 @@ jobs:
           key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-aarch64-cargo-
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25b
-          add-to-path: false
-
-      - name: Configure cross-compilation
+      - name: Install cross (prebuilt)
         run: |
-          mkdir -p .cargo
-          NDK="${{ steps.setup-ndk.outputs.ndk-path }}"
-          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
-          cat > .cargo/config.toml << EOF
-          [target.aarch64-linux-android]
-          linker = "$TOOLCHAIN/bin/aarch64-linux-android24-clang"
-          ar = "$TOOLCHAIN/bin/llvm-ar"
-          EOF
+          curl -sSL https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-gnu.tar.gz | tar -xzf - -C ~/.cargo/bin
+          chmod +x ~/.cargo/bin/cross
 
       - name: Build for Android ARM64
-        run: cargo build --target aarch64-linux-android --release
+        run: cross build --target aarch64-linux-android --release
 
       - name: Rename binary
         run: |
