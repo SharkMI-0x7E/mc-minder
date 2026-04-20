@@ -15,26 +15,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: aarch64-unknown-linux-musl
-            archive: tar.gz
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz
+        target:
+          - x86_64-unknown-linux-musl
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build
-        uses: rust-build/rust-build.action@v1.4.5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          ARCHIVE_TYPES: ${{ matrix.archive }}
-          UPLOAD_MODE: none
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --target ${{ matrix.target }} --release
 
       - name: Rename binary
         run: |
-          mv target/${{ matrix.target }}/release/mc-minder mc-minder-${{ matrix.target }} || true
-          chmod +x mc-minder-${{ matrix.target }} || true
+          mv target/${{ matrix.target }}/release/mc-minder mc-minder-${{ matrix.target }}
+          chmod +x mc-minder-${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -48,12 +51,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Download aarch64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mc-minder-aarch64-unknown-linux-musl
-          path: ./binaries
 
       - name: Download x86_64 artifact
         uses: actions/download-artifact@v4
@@ -85,7 +82,6 @@ jobs:
             ### 下载
             | 平台 | 文件 |
             |------|------|
-            | ARM64 Linux (Termux/Android) | `mc-minder-aarch64-unknown-linux-musl` |
             | x64 Linux | `mc-minder-x86_64-unknown-linux-musl` |
             
             ### 安装
@@ -93,7 +89,6 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
             ```
           files: |
-            binaries/mc-minder-aarch64-unknown-linux-musl
             binaries/mc-minder-x86_64-unknown-linux-musl
             install.sh
           draft: false
