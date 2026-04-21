@@ -14,23 +14,6 @@ RUST_PID_FILE="/tmp/mc-minder.pid"
 SERVER_PID_FILE="/tmp/mc-server.pid"
 SESSION_NAME="mc_server"
 
-# ==================== 二进制文件检测 ====================
-find_rust_binary() {
-    if [ -f "$RUST_BIN" ]; then
-        return 0
-    fi
-
-    for candidate in mc-minder-termux-aarch64 mc-minder-x86_64-linux; do
-        if [ -f "./$candidate" ]; then
-            log_info "Found binary: $candidate, creating symlink..."
-            ln -sf "$candidate" "$RUST_BIN"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 # ==================== 颜色定义（用于非 dialog 输出）====================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -49,6 +32,23 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[错误]${NC} $1"
+}
+
+# ==================== 二进制文件检测 ====================
+find_rust_binary() {
+    if [ -f "$RUST_BIN" ]; then
+        return 0
+    fi
+
+    for candidate in mc-minder-termux-aarch64 mc-minder-x86_64-linux; do
+        if [ -f "./$candidate" ]; then
+            log_info "Found binary: $candidate, creating symlink..."
+            ln -sf "$candidate" "$RUST_BIN"
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 # ==================== 环境检测函数 ====================
@@ -129,7 +129,7 @@ get_config_value() {
             fi
         fi
 
-        local line=$(grep -E "(^|[\s])${key}\s*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^\s*#" | tail -1)
+        local line=$(grep -E "(^|[[:space:]])${key}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
         if [ -n "$line" ]; then
             local value="${line#*=}"
             value="${value#"${value%%[![:space:]]*}"}"

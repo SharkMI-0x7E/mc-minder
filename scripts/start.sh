@@ -6,6 +6,26 @@ RUST_BIN="./mc-minder"
 RUST_PID_FILE="/tmp/mc-minder.pid"
 SESSION_NAME="mc_server"
 
+# ==================== 颜色定义 ====================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ==================== 日志函数 ====================
+log_info() {
+    echo -e "${GREEN}[信息]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[警告]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[错误]${NC} $1"
+}
+
 # ==================== 二进制文件检测 ====================
 find_rust_binary() {
     if [ -f "$RUST_BIN" ]; then
@@ -21,24 +41,6 @@ find_rust_binary() {
     done
 
     return 1
-}
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log_info() {
-    echo -e "${GREEN}[信息]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[警告]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[错误]${NC} $1"
 }
 
 # 优化的配置读取：优先使用 mc-minder 二进制，失败时回退到 grep 解析
@@ -72,7 +74,7 @@ get_config_value() {
             fi
         fi
 
-        local line=$(grep -E "(^|[\s])${key}\s*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^\s*#" | tail -1)
+        local line=$(grep -E "(^|[[:space:]])${key}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
         if [ -n "$line" ]; then
             local value="${line#*=}"
             value="${value#"${value%%[![:space:]]*}"}"

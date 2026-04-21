@@ -259,23 +259,15 @@ sed -i 's/\r$//' *.sh
 
 本项目已在 `.gitattributes` 中配置 `*.sh text eol=lf`，Git 检出时会自动使用 LF 换行符。
 
-## 新版本特性 (v0.3.0)
+## 版本历史
 
-### 性能优化
-- **RCON 异步化**：使用 tokio 异步网络，不再阻塞事件循环
-- **日志监控优化**：使用 notify 库替代轮询，CPU 占用接近 0
-- **AI 请求限流**：防止 API 过载，同一玩家请求间隔 2 秒
+详见 [CHANGELOG](https://github.com/SharkMI-0x7E/mc-minder/releases) 或 [GitHub Releases](https://github.com/SharkMI-0x7E/mc-minder/releases)
 
-### 用户体验
-- **一键安装**：`install.sh` 自动下载并配置
-- **交互式初始化**：`mc-minder init` 引导配置
-- **自动更新**：`mc-minder self-update` 一键更新
-- **友好错误提示**：详细的错误信息和解决建议
-- **日志轮转**：自动归档超过 50MB 的日志文件
-
-### 配置统一
-- 所有配置集中在 `config.toml`
-- `start.sh` 从配置文件读取内存设置
+### 最近更新 (v0.3.11)
+- 修复脚本函数定义顺序错误
+- 修复 grep 正则表达式兼容性问题
+- 改进 JVM 配置支持
+- 优化 ARM64 架构检测提示
 
 ## 贡献
 

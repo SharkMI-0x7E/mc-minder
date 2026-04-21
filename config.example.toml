@@ -48,12 +48,10 @@ telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
 
-# JVM Configuration - Advanced JVM tuning options (optional)
-# JVM 配置 - 高级 JVM 调优选项（可选）
-# Uncomment and modify as needed
-# 取消注释并根据需要修改
-# [jvm]
-# gc = "G1GC"
-# extra_flags = "-XX:+UseContainerSupport"
-# xmx = ""  # Override max memory from server section (optional)
-# xms = ""  # Override min memory from server section (optional)
+# JVM Configuration - Advanced JVM tuning options
+# JVM 配置 - 高级 JVM 调优选项
+[jvm]
+gc = "G1GC"
+extra_flags = "-XX:+UseContainerSupport"
+# xmx = ""  # Optional: Override max memory from server section
+# xms = ""  # Optional: Override min memory from server section

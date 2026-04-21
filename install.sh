@@ -31,6 +31,7 @@ detect_arch() {
                 echo "termux-aarch64"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
                 echo "termux-aarch64"
+                log_info "Note: Using termux-aarch64 binary (compatible with ARM64 Linux including non-Termux)"
             elif [ "$arch" = "x86_64" ]; then
                 echo "x86_64-linux"
             else
@@ -279,7 +280,7 @@ show_post_install_instructions() {
 
 main() {
     echo ""
-    echo -e "${BLUE}MC-Minder Installer v0.3.7${NC}"
+    echo -e "${BLUE}MC-Minder Installer${NC}"
     echo "========================="
     echo ""
     
