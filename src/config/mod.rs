@@ -14,6 +14,7 @@ pub struct Config {
     #[serde(default)]
     pub notification: NotificationConfig,
     #[serde(default)]
+    #[allow(dead_code)]
     pub jvm: JvmConfig,
 }
 

@@ -100,6 +100,7 @@ impl ContextManager {
         self.messages.read().len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.messages.read().is_empty()
     }
