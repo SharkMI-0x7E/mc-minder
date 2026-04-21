@@ -11,7 +11,6 @@ CONFIG_FILE="config.toml"
 LOG_FILE="logs/latest.log"
 RUST_BIN="./mc-minder"
 RUST_PID_FILE="/tmp/mc-minder.pid"
-SERVER_PID_FILE="/tmp/mc-server.pid"
 SESSION_NAME="mc_server"
 
 # ==================== 颜色定义（用于非 dialog 输出）====================
@@ -101,64 +100,56 @@ install_dialog() {
 }
 
 # ==================== 配置读取函数 ====================
-get_config() {
-    local key="$1"
-    local default="$2"
-
-    if [ -f "$RUST_BIN" ]; then
-        local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
-        if [ -n "$value" ] && [ "$value" != "Error" ] && [ "$value" != "" ]; then
-            echo "$value"
-            return
-        fi
-    fi
-
-    get_config_value "$key" "$default"
-}
-
+# 使用 awk 解析 TOML 配置文件，不依赖 mc-minder 二进制
 get_config_value() {
     local key="$1"
     local default="$2"
 
-    if [ -f "$CONFIG_FILE" ]; then
-        if [ -f "$RUST_BIN" ] || find_rust_binary; then
-            local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
-            if [ $? -eq 0 ] && [ -n "$value" ] && [ "$value" != "null" ] && [ "$value" != "" ]; then
-                echo "$value"
-                return
-            fi
-        fi
-
-        local line=$(grep -E "(^|[[:space:]])${key}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
-        if [ -n "$line" ]; then
-            local value="${line#*=}"
-            value="${value#"${value%%[![:space:]]*}"}"
-            value="${value%"${value##*[![:space:]]}"}"
-
-            if [[ "$value" == \"*\" ]]; then
-                value="${value#\"}"
-                value="${value%\"}"
-                echo "$value"
-                return
-            fi
-
-            value="${value%%#*}"
-            value="${value%"${value##*[![:space:]]}"}"
-
-            if [ -n "$value" ]; then
-                echo "$value"
-                return
-            fi
-        fi
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "$default"
+        return
     fi
-    echo "$default"
+
+    # 使用 awk 解析 TOML 配置文件
+    local value=$(awk -F '=' -v key="$key" '
+    BEGIN { in_server = 0 }
+    /^\[server\]/ { in_server = 1; next }
+    /^\[/ && !/^\[server\]/ { in_server = 0; next }
+    in_server && $1 ~ key {
+        # 获取等号右边的值
+        val = $2
+        # 移除行内注释
+        sub(/#.*/, "", val)
+        # 去除首尾空格
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+        # 去除引号
+        gsub(/^["'"'"']|["'"'"']$/, "", val)
+        if (val != "") {
+            print val
+            exit
+        }
+    }
+    ' "$CONFIG_FILE")
+
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
 }
 
 load_config() {
-    JAR=$(get_config "jar" "fabric-server.jar")
-    MIN_MEM=$(get_config "min_mem" "512M")
-    MAX_MEM=$(get_config "max_mem" "1G")
-    SESSION=$(get_config "session_name" "mc_server")
+    if [ -f "$CONFIG_FILE" ]; then
+        JAR=$(get_config_value "jar" "fabric-server.jar")
+        MIN_MEM=$(get_config_value "min_mem" "512M")
+        MAX_MEM=$(get_config_value "max_mem" "1G")
+        SESSION=$(get_config_value "session_name" "mc_server")
+    else
+        JAR="fabric-server.jar"
+        MIN_MEM="512M"
+        MAX_MEM="1G"
+        SESSION="mc_server"
+    fi
 }
 
 # ==================== 依赖检查函数 ====================
@@ -221,8 +212,6 @@ start_background() {
     tmux send-keys -t "$SESSION" "cd '$(pwd)'" Enter
     tmux send-keys -t "$SESSION" "java -Xms$MIN_MEM -Xmx$MAX_MEM -jar $JAR nogui" Enter
     
-    echo $! > "$SERVER_PID_FILE"
-    
     sleep 5
     
     if check_rust_binary; then
@@ -236,7 +225,7 @@ start_background() {
             while true; do
                 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
                     kill -TERM $(cat "$RUST_PID_FILE" 2>/dev/null) 2>/dev/null
-                    rm -f "$RUST_PID_FILE" "$SERVER_PID_FILE"
+                    rm -f "$RUST_PID_FILE"
                     exit 0
                 fi
                 
@@ -292,8 +281,6 @@ stop_server() {
             tmux kill-session -t "$SESSION"
         fi
     fi
-    
-    rm -f "$SERVER_PID_FILE"
     
     dialog --msgbox "\n服务器已成功停止!" 7 40
 }
@@ -385,16 +372,16 @@ init_config() {
         --cancel-label "取消" \
         --form "\nMC-Minder 初始化配置\n\n请填写以下信息:" \
         18 70 0 \
-        "服务器 JAR 文件:"     1 1 "$(get_config 'jar' 'fabric-server.jar')"       1 25 45 0 \
-        "最小内存:"             2 1 "$(get_config 'min_mem' '512M')"                 2 25 10 0 \
-        "最大内存:"             3 1 "$(get_config 'max_mem' '1G')"                   3 25 10 0 \
-        "Tmux 会话名称:"        4 1 "$(get_config 'session_name' 'mc_server')"        4 25 20 0 \
-        "RCON 端口:"            5 1 "$(get_config 'rcon_port' '25575')"              5 25 10 0 \
-        "RCON 密码:"            6 1 "$(get_config 'rcon_password' 'password')"       6 25 30 0 \
-        "AI 提供商:"            7 1 "$(get_config 'ai_provider' 'openai')"           7 25 15 0 \
-        "API 密钥:"             8 1 "$(get_config 'api_key' '')"                      8 25 40 0 \
-        "API 模型:"             9 1 "$(get_config 'model' 'gpt-4o-mini')"           9 25 25 0 \
-        "HTTP API 端口:"       10 1 "$(get_config 'http_port' '8080')"              10 25 10 0 \
+        "服务器 JAR 文件:"     1 1 "$(get_config_value 'jar' 'fabric-server.jar')"       1 25 45 0 \
+        "最小内存:"             2 1 "$(get_config_value 'min_mem' '512M')"                 2 25 10 0 \
+        "最大内存:"             3 1 "$(get_config_value 'max_mem' '1G')"                   3 25 10 0 \
+        "Tmux 会话名称:"        4 1 "$(get_config_value 'session_name' 'mc_server')"        4 25 20 0 \
+        "RCON 端口:"            5 1 "$(get_config_value 'rcon_port' '25575')"              5 25 10 0 \
+        "RCON 密码:"            6 1 "$(get_config_value 'rcon_password' 'password')"       6 25 30 0 \
+        "AI 提供商:"            7 1 "$(get_config_value 'ai_provider' 'openai')"           7 25 15 0 \
+        "API 密钥:"             8 1 "$(get_config_value 'api_key' '')"                      8 25 40 0 \
+        "API 模型:"             9 1 "$(get_config_value 'model' 'gpt-4o-mini')"           9 25 25 0 \
+        "HTTP API 端口:"       10 1 "$(get_config_value 'http_port' '8080')"              10 25 10 0 \
         2>&1 1>&3)
     exit_code=$?
     exec 3>&-
@@ -466,16 +453,19 @@ EOF
 }
 
 update_mcminder() {
-    if ! check_rust_binary; then
+    if ! find_rust_binary; then
+        dialog --title "更新失败" --msgbox "\nMC-Minder 二进制文件不存在，无法执行更新。\n\n请从 GitHub Releases 手动下载最新版本:\nhttps://github.com/SharkMI-0x7E/mc-minder/releases\n\n或运行一键安装脚本:\ncurl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash" 13 60
         return 1
     fi
     
     dialog --infobox "\n正在更新 MC-Minder...\n这可能需要一些时间，请耐心等待。" 8 50
     
-    if "$RUST_BIN" self-update; then
+    local update_output
+    if update_output=$("$RUST_BIN" self-update 2>&1); then
         dialog --msgbox "\nMC-Minder 更新成功!\n\n建议重启服务以应用更新。" 8 50
     else
-        dialog --msgbox "\n更新失败!\n\n请检查网络连接或手动从 GitHub 下载最新版本。" 8 50
+        dialog --title "更新失败" --msgbox "\nMC-Minder 更新失败!\n\n输出信息:\n$update_output\n\n可能的原因:\n1. 网络连接问题\n2. GitHub API 访问受限\n3. 权限不足\n\n请尝试手动下载:\nhttps://github.com/SharkMI-0x7E/mc-minder/releases" 16 60
+        return 1
     fi
 }
 

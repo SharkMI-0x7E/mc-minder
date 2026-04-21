@@ -43,67 +43,57 @@ find_rust_binary() {
     return 1
 }
 
-# 优化的配置读取：优先使用 mc-minder 二进制，失败时回退到 grep 解析
-get_config() {
-    local key="$1"
-    local default="$2"
-
-    # 尝试使用 mc-minder 二进制获取配置
-    if [ -f "$RUST_BIN" ]; then
-        local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
-        if [ -n "$value" ] && [ "$value" != "Error" ] && [ "$value" != "" ]; then
-            echo "$value"
-            return
-        fi
-    fi
-
-    # 回退到 grep 解析
-    get_config_value "$key" "$default"
-}
-
+# ==================== 配置读取函数（纯 awk 解析 TOML）====================
+# 使用 awk 解析 config.toml，不依赖 mc-minder 二进制
 get_config_value() {
     local key="$1"
     local default="$2"
 
-    if [ -f "$CONFIG_FILE" ]; then
-        if [ -f "$RUST_BIN" ] || find_rust_binary; then
-            local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
-            if [ $? -eq 0 ] && [ -n "$value" ] && [ "$value" != "null" ] && [ "$value" != "" ]; then
-                echo "$value"
-                return
-            fi
-        fi
-
-        local line=$(grep -E "(^|[[:space:]])${key}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
-        if [ -n "$line" ]; then
-            local value="${line#*=}"
-            value="${value#"${value%%[![:space:]]*}"}"
-            value="${value%"${value##*[![:space:]]}"}"
-
-            if [[ "$value" == \"*\" ]]; then
-                value="${value#\"}"
-                value="${value%\"}"
-                echo "$value"
-                return
-            fi
-
-            value="${value%%#*}"
-            value="${value%"${value##*[![:space:]]}"}"
-
-            if [ -n "$value" ]; then
-                echo "$value"
-                return
-            fi
-        fi
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "$default"
+        return
     fi
-    echo "$default"
+
+    # 使用 awk 解析 TOML 配置文件
+    local value=$(awk -F '=' -v key="$key" '
+    BEGIN { in_server = 0 }
+    /^\[server\]/ { in_server = 1; next }
+    /^\[/ && !/^\[server\]/ { in_server = 0; next }
+    in_server && $1 ~ key {
+        # 获取等号右边的值
+        val = $2
+        # 移除行内注释
+        sub(/#.*/, "", val)
+        # 去除首尾空格
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+        # 去除引号
+        gsub(/^["'"'"']|["'"'"']$/, "", val)
+        if (val != "") {
+            print val
+            exit
+        }
+    }
+    ' "$CONFIG_FILE")
+
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
 }
 
 load_config() {
-    JAR=$(get_config "jar" "fabric-server.jar")
-    MIN_MEM=$(get_config "min_mem" "512M")
-    MAX_MEM=$(get_config "max_mem" "1G")
-    SESSION=$(get_config "session_name" "mc_server")
+    if [ -f "$CONFIG_FILE" ]; then
+        JAR=$(get_config_value "jar" "fabric-server.jar")
+        MIN_MEM=$(get_config_value "min_mem" "512M")
+        MAX_MEM=$(get_config_value "max_mem" "1G")
+        SESSION=$(get_config_value "session_name" "mc_server")
+    else
+        JAR="fabric-server.jar"
+        MIN_MEM="512M"
+        MAX_MEM="1G"
+        SESSION="mc_server"
+    fi
 }
 
 is_termux() {
@@ -399,9 +389,28 @@ case "${1:-}" in
         ;;
     update)
         if find_rust_binary; then
-            "$RUST_BIN" self-update
+            log_info "正在更新 MC-Minder..."
+            if "$RUST_BIN" self-update; then
+                log_info "MC-Minder 更新成功!"
+                log_info "建议重启服务以应用更新。"
+            else
+                log_error "MC-Minder 更新失败!"
+                log_info "可能的原因:"
+                log_info "  1. 网络连接问题"
+                log_info "  2. GitHub API 访问受限"
+                log_info "  3. 权限不足"
+                log_info ""
+                log_info "请尝试手动下载:"
+                log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
+                exit 1
+            fi
         else
             log_error "MC-Minder 二进制文件不存在"
+            log_info "请从 GitHub Releases 下载或从源码编译:"
+            log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
+            log_info ""
+            log_info "或运行一键安装脚本:"
+            log_info "  curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash"
             exit 1
         fi
         ;;
