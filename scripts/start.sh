@@ -6,6 +6,23 @@ RUST_BIN="./mc-minder"
 RUST_PID_FILE="/tmp/mc-minder.pid"
 SESSION_NAME="mc_server"
 
+# ==================== 二进制文件检测 ====================
+find_rust_binary() {
+    if [ -f "$RUST_BIN" ]; then
+        return 0
+    fi
+
+    for candidate in mc-minder-termux-aarch64 mc-minder-x86_64-linux; do
+        if [ -f "./$candidate" ]; then
+            log_info "Found binary: $candidate, creating symlink..."
+            ln -sf "$candidate" "$RUST_BIN"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -133,13 +150,16 @@ check_server_jar() {
 }
 
 check_rust_binary() {
-    if [ ! -f "$RUST_BIN" ]; then
-        log_warn "MC-Minder 二进制文件不存在: $RUST_BIN"
-        log_info "请从 GitHub Releases 下载或从源码编译:"
-        log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
-        return 1
+    if find_rust_binary; then
+        return 0
     fi
-    return 0
+    log_warn "MC-Minder 二进制文件不存在: $RUST_BIN"
+    log_info "请从 GitHub Releases 下载或从源码编译:"
+    log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
+    log_info ""
+    log_info "或运行一键安装脚本:"
+    log_info "  curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash"
+    return 1
 }
 
 start_background() {
@@ -360,7 +380,7 @@ case "${1:-}" in
         show_minder_logs
         ;;
     init)
-        if [ -f "$RUST_BIN" ]; then
+        if find_rust_binary; then
             "$RUST_BIN" init
         else
             log_error "MC-Minder 二进制文件不存在"
@@ -368,7 +388,7 @@ case "${1:-}" in
         fi
         ;;
     update)
-        if [ -f "$RUST_BIN" ]; then
+        if find_rust_binary; then
             "$RUST_BIN" self-update
         else
             log_error "MC-Minder 二进制文件不存在"
