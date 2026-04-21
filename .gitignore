@@ -23,7 +23,7 @@ world_the_end/
 *.jar
 
 
-
+# 以下三个文件 不能上传
 claude.md
 AGENTS.md
 .trae/
