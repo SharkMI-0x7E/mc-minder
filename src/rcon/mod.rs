@@ -206,6 +206,7 @@ impl RconClient {
         })
     }
 
+    #[allow(dead_code)]
     pub async fn disconnect(&mut self) {
         if let Some(mut stream) = self.stream.take() {
             let _ = stream.shutdown().await;

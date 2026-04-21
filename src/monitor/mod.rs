@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ChatMessage {
     pub player: String,
     pub content: String,
@@ -22,6 +23,7 @@ pub struct LogMonitor {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum LogEvent {
     Chat(ChatMessage),
     PlayerJoin(String),

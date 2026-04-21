@@ -119,6 +119,7 @@ impl Default for BackupConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct NotificationConfig {
     #[serde(default)]
     pub telegram_bot_token: String,
@@ -141,6 +142,7 @@ impl Default for NotificationConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct JvmConfig {
     #[serde(default = "default_gc")]
     pub gc: String,

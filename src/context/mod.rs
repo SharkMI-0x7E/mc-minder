@@ -90,6 +90,7 @@ impl ContextManager {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn clear(&self) {
         let mut messages = self.messages.write();
         messages.clear();
@@ -103,6 +104,7 @@ impl ContextManager {
         self.messages.read().is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn get_recent_players(&self, count: usize) -> Vec<String> {
         let messages = self.messages.read();
         let mut players = Vec::new();
