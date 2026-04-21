@@ -64,7 +64,15 @@ get_config_value() {
     local default="$2"
 
     if [ -f "$CONFIG_FILE" ]; then
-        local line=$(grep -E "^${key}\s*=" "$CONFIG_FILE" 2>/dev/null | head -1)
+        if [ -f "$RUST_BIN" ] || find_rust_binary; then
+            local value=$("$RUST_BIN" config get "$key" 2>/dev/null)
+            if [ $? -eq 0 ] && [ -n "$value" ] && [ "$value" != "null" ] && [ "$value" != "" ]; then
+                echo "$value"
+                return
+            fi
+        fi
+
+        local line=$(grep -E "(^|[\s])${key}\s*=" "$CONFIG_FILE" 2>/dev/null | grep -v "^\s*#" | tail -1)
         if [ -n "$line" ]; then
             local value="${line#*=}"
             value="${value#"${value%%[![:space:]]*}"}"
