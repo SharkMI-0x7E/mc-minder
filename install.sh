@@ -48,11 +48,7 @@ detect_arch() {
             log_info "  2. Clone repository: git clone https://github.com/$REPO.git"
             log_info "  3. Build: cd mc-minder && cargo build --release"
             echo ""
-            if [ "$arch" = "arm64" ]; then
-                echo "termux-aarch64"
-            else
-                echo "x86_64-linux"
-            fi
+            exit 1
             ;;
         *)
             echo "unknown"
