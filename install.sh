@@ -30,7 +30,7 @@ detect_arch() {
             if [ -n "$TERMUX_VERSION" ] || [ -f "/system/bin/app_process" ]; then
                 echo "termux-aarch64"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
-                echo "aarch64-linux"
+                echo "termux-aarch64"
             elif [ "$arch" = "x86_64" ]; then
                 echo "x86_64-linux"
             else
@@ -38,10 +38,12 @@ detect_arch() {
             fi
             ;;
         Darwin)
+            log_warn "macOS is not officially supported yet"
+            log_warn "Please compile from source: https://github.com/$REPO"
             if [ "$arch" = "arm64" ]; then
-                echo "aarch64-apple-darwin"
+                echo "termux-aarch64"
             else
-                echo "x86_64-apple-darwin"
+                echo "x86_64-linux"
             fi
             ;;
         *)
