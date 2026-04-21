@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -50,6 +52,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -91,6 +95,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -101,6 +107,38 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # 获取上一个 tag（如果有）
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "${{ steps.get_version.outputs.VERSION }}" | head -1)
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Generating changelog from ${PREVIOUS_TAG} to ${{ steps.get_version.outputs.VERSION }}"
+            
+            # 生成 changelog
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ steps.get_version.outputs.VERSION }} \
+              --pretty=format:"- %s (%h)" \
+              --no-merges)
+          else
+            echo "No previous tag found, generating full changelog"
+            
+            # 第一个 release，显示所有 commit
+            CHANGELOG=$(git log \
+              --pretty=format:"- %s (%h)" \
+              --no-merges)
+          fi
+          
+          # 如果没有 commit，使用默认消息
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Initial release"
+          fi
+          
+          # 将 changelog 写入输出（转义特殊字符）
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -109,25 +147,37 @@ jobs:
           body: |
             ## MC-Minder ${{ steps.get_version.outputs.VERSION }}
             
+            ### 更新内容
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ---
+            
+            ### 下载
+            
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | Linux x64 | `mc-minder-x86_64-linux` | 适用于桌面 Linux / WSL |
+            | Termux/Android ARM64 | `mc-minder-termux-aarch64` | 适用于手机 Termux 环境 |
+            
+            ### 安装
+            
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
+            ```
+            
             ### 功能特性
+            
             - 日志监控：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
             - AI 聊天机器人：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发
             - RCON 通信：异步 RCON 协议实现，自动重连
             - 上下文记忆：按玩家保存对话历史
             - HTTP API：RESTful API 用于状态查询和命令执行
+            - TUI 启动脚本：基于 dialog 的图形化管理界面
+            - JVM 配置支持：自定义 GC 算法和 JVM 参数
+            - Telegram 通知：服务器事件实时推送
             - 一键安装：交互式初始化配置
             - 自动更新：内置 self-update 命令
-            
-            ### 下载
-            | 平台 | 文件 |
-            |------|------|
-            | Linux x64 | `mc-minder-x86_64-linux` |
-            | Termux/Android ARM64 | `mc-minder-termux-aarch64` |
-            
-            ### 安装
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
-            ```
           files: |
             binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
             binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
