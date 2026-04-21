@@ -29,7 +29,7 @@ const LOG_FILE_MAX_SIZE: u64 = 50 * 1024 * 1024;
 #[derive(Parser, Debug)]
 #[command(name = "mc-minder")]
 #[command(author = "SharkMI-0x7E")]
-#[command(version = "0.3.4")]
+#[command(version)] // 自动从 Cargo.toml 读取版本号
 #[command(about = "A smart management suite for Minecraft Fabric servers")]
 struct Args {
     #[command(subcommand)]

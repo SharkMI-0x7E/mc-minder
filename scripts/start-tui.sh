@@ -459,7 +459,7 @@ show_main_menu() {
     while true; do
         exec 3>&1
         selection=$(dialog --clear \
-            --backtitle "MC-Minder v0.3.4 - Minecraft 服务器管理套件" \
+            --backtitle "MC-Minder - Minecraft 服务器管理套件" \
             --title "主菜单" \
             --menu "\n选择要执行的操作:" \
             18 60 10 \
@@ -524,7 +524,7 @@ main() {
     
     export LANG=${LANG:-zh_CN.UTF-8}
     
-    dialog --backtitle "MC-Minder v0.3.4" \
+    dialog --backtitle "MC-Minder - Minecraft 服务器管理套件" \
         --title "欢迎使用" \
         --msgbox "\n欢迎使用 MC-Minder TUI 管理界面!\n\n这是一个基于 dialog 的图形化管理工具,\n可以方便地管理你的 Minecraft Fabric 服务器。\n\n按 Enter 进入主菜单..." 13 55
     
