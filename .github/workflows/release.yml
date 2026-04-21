@@ -40,11 +40,16 @@ jobs:
           mv target/release/mc-minder mc-minder-x86_64-linux
           chmod +x mc-minder-x86_64-linux
 
+      - name: Generate SHA256 checksum
+        run: sha256sum mc-minder-x86_64-linux > mc-minder-x86_64-linux.sha256
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mc-minder-x86_64-linux
-          path: mc-minder-x86_64-linux
+          path: |
+            mc-minder-x86_64-linux
+            mc-minder-x86_64-linux.sha256
 
   build-termux-aarch64:
     name: Build Termux ARM64
@@ -83,11 +88,16 @@ jobs:
           mv target/aarch64-linux-android/release/mc-minder mc-minder-termux-aarch64
           chmod +x mc-minder-termux-aarch64
 
+      - name: Generate SHA256 checksum
+        run: sha256sum mc-minder-termux-aarch64 > mc-minder-termux-aarch64.sha256
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mc-minder-termux-aarch64
-          path: mc-minder-termux-aarch64
+          path: |
+            mc-minder-termux-aarch64
+            mc-minder-termux-aarch64.sha256
 
   release:
     needs: [build-linux-x86_64, build-termux-aarch64]
@@ -180,7 +190,9 @@ jobs:
             - 自动更新：内置 self-update 命令
           files: |
             binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
+            binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux.sha256
             binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
+            binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64.sha256
             install.sh
           draft: false
           prerelease: false
