@@ -442,6 +442,8 @@ termux_notify = true
 [jvm]
 gc = "G1GC"
 extra_flags = ""
+# xmx = ""  # Optional: Override max memory from server section
+# xms = ""  # Optional: Override min memory from server section
 EOF
             
             dialog --msgbox "\n配置已保存到 $CONFIG_FILE" 7 50
