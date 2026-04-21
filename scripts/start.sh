@@ -4,7 +4,7 @@ CONFIG_FILE="config.toml"
 LOG_FILE="logs/latest.log"
 RUST_BIN="./mc-minder"
 RUST_PID_FILE="/tmp/mc-minder.pid"
-SERVER_PID_FILE="/tmp/mc-server.pid"
+SESSION_NAME="mc_server"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -170,9 +170,7 @@ start_background() {
     
     tmux send-keys -t "$SESSION" "cd '$(pwd)'" Enter
     tmux send-keys -t "$SESSION" "java -Xms$MIN_MEM -Xmx$MAX_MEM -jar $JAR nogui" Enter
-    
-    echo $! > "$SERVER_PID_FILE"
-    
+
     log_info "服务器已在 tmux 会话 '$SESSION' 中启动"
     log_info "附加到会话: tmux attach -t $SESSION"
     
@@ -192,7 +190,7 @@ start_background() {
                 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
                     log_warn "服务器会话已终止，正在停止 MC-Minder..."
                     kill -TERM $(cat "$RUST_PID_FILE" 2>/dev/null) 2>/dev/null
-                    rm -f "$RUST_PID_FILE" "$SERVER_PID_FILE"
+                    rm -f "$RUST_PID_FILE"
                     exit 0
                 fi
                 
@@ -258,7 +256,7 @@ stop_server() {
         log_warn "未找到运行中的会话"
     fi
     
-    rm -f "$SERVER_PID_FILE"
+    rm -f "$RUST_PID_FILE"
 }
 
 status_server() {

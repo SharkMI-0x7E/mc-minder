@@ -220,7 +220,7 @@ start_background() {
                     if ! kill -0 "$RUST_PID" 2>/dev/null; then
                         if check_rust_binary; then
                             nohup "$RUST_BIN" --config "$CONFIG_FILE" >> logs/mc-minder.log 2>&1 &
-                            echo ! > "$RUST_PID_FILE"
+                            echo $! > "$RUST_PID_FILE"
                         fi
                     fi
                 fi

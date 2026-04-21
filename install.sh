@@ -38,8 +38,16 @@ detect_arch() {
             fi
             ;;
         Darwin)
-            log_warn "macOS is not officially supported yet"
-            log_warn "Please compile from source: https://github.com/$REPO"
+            log_error "macOS is NOT supported for pre-built binaries"
+            echo ""
+            log_info "Reason: The pre-compiled binaries are built for Linux/Android only"
+            log_info "macOS requires different system libraries and cannot run them"
+            echo ""
+            log_info "To install on macOS, please compile from source:"
+            log_info "  1. Install Rust: https://rustup.rs"
+            log_info "  2. Clone repository: git clone https://github.com/$REPO.git"
+            log_info "  3. Build: cd mc-minder && cargo build --release"
+            echo ""
             if [ "$arch" = "arm64" ]; then
                 echo "termux-aarch64"
             else
