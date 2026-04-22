@@ -2,7 +2,7 @@ use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use dialoguer::{Input, Confirm};
-use log::{info, warn, error};
+use log::{debug, info, warn, error};
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
