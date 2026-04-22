@@ -52,16 +52,20 @@ impl FileId {
 
 impl LogMonitor {
     pub fn new(log_path: PathBuf) -> Result<Self> {
-        let chat_pattern = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\]: <([^>]+)> (.+)")
+        // 更灵活的正则表达式，支持多种 Minecraft 版本：
+        // - 时间部分：小时可以有或没有前导零 [9:30:45] 或 [09:30:45]
+        // - 线程名称：支持 [Server thread/INFO]、[Server thread/INFO] [Minecraft] 等
+        // - 玩家消息：<玩家名> 消息内容
+        let chat_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: <([^>]+)> (.+)")
             .context("Failed to compile chat pattern")?;
         
-        let join_pattern = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\]: (\w+) joined the game")
+        let join_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) joined the game")
             .context("Failed to compile join pattern")?;
         
-        let leave_pattern = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\]: (\w+) left the game")
+        let leave_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) left the game")
             .context("Failed to compile leave pattern")?;
         
-        let death_pattern = Regex::new(r"\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\]: (\w+) .*(died|was|fell|drowned|blew up|burned|froze|suffocated|starved)")
+        let death_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) .*(died|was|fell|drowned|blew up|burned|froze|suffocated|starved)")
             .context("Failed to compile death pattern")?;
 
         Ok(Self {
@@ -228,7 +232,14 @@ impl LogMonitor {
         file.take(bytes_to_read as u64).read_to_end(&mut buffer)?;
 
         String::from_utf8(buffer)
-            .context("Failed to convert file content to UTF-8 string")
+            .map_err(|e| {
+                // 使用 lossy 转换，保留有效字符并替换无效字节
+                let lossy = String::from_utf8_lossy(e.as_bytes());
+                warn!("UTF-8 decode error, using lossy conversion: {}", e);
+                anyhow::anyhow!("Failed to convert file content to UTF-8: {}", lossy)
+            })
+            // 如果失败，使用 lossy 转换作为后备
+            .or_else(|_| Ok(String::from_utf8_lossy(&buffer).into_owned()))
     }
 
     fn parse_lines(content: &str, patterns: &(Regex, Regex, Regex, Regex)) -> Vec<LogEvent> {
