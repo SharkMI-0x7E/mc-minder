@@ -1,10 +1,13 @@
 #!/bin/bash
 
 CONFIG_FILE="config.toml"
-LOG_FILE="logs/latest.log"
-RUST_BIN="./mc-minder"
-RUST_PID_FILE="/tmp/mc-minder.pid"
 SESSION_NAME="mc_server"
+
+# PID 文件路径（使用用户目录，避免 /tmp 权限问题）
+PID_DIR="$HOME/.mc-minder/tmp"
+mkdir -p "$PID_DIR"
+RUST_PID_FILE="$PID_DIR/mc-minder.pid"
+WATCHDOG_PID_FILE="$PID_DIR/mc-minder-watchdog.pid"
 
 # ==================== 颜色定义 ====================
 RED='\033[0;31m'
@@ -26,54 +29,64 @@ log_error() {
     echo -e "${RED}[错误]${NC} $1"
 }
 
-# ==================== 二进制文件检测 ====================
+# ==================== 二进制文件检测（直接使用，不创建软链接）====================
+RUST_BIN=""  # 初始为空，在 find_rust_binary 中设置
 find_rust_binary() {
-    if [ -f "$RUST_BIN" ]; then
+    # 如果已经找到有效二进制，直接返回
+    if [ -n "$RUST_BIN" ] && [ -f "$RUST_BIN" ] && [ -x "$RUST_BIN" ]; then
         return 0
     fi
 
+    # 遍历候选文件名，找到第一个可执行的
     for candidate in mc-minder-termux-aarch64 mc-minder-x86_64-linux; do
         if [ -f "./$candidate" ]; then
-            log_info "Found binary: $candidate, creating symlink..."
-            ln -sf "$candidate" "$RUST_BIN"
+            RUST_BIN="./$candidate"
+            chmod +x "$RUST_BIN" 2>/dev/null || true
+            log_info "找到二进制文件: $candidate"
             return 0
         fi
     done
 
+    # 如果都不存在，尝试使用默认名称
+    if [ -f "./mc-minder" ] && [ -x "./mc-minder" ]; then
+        RUST_BIN="./mc-minder"
+        return 0
+    fi
+
+    RUST_BIN=""
     return 1
 }
 
-# ==================== 配置读取函数（纯 awk 解析 TOML）====================
-# 使用 awk 解析 config.toml，不依赖 mc-minder 二进制
+# ==================== 配置读取函数（支持段名）====================
+# 用法: get_config_value <段名> <键名> [默认值]
 get_config_value() {
-    local key="$1"
-    local default="$2"
+    local section="$1"
+    local key="$2"
+    local default="$3"
 
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "$default"
         return
     fi
 
-    # 使用 awk 解析 TOML 配置文件
-    local value=$(awk -F '=' -v key="$key" '
-    BEGIN { in_server = 0 }
-    /^\[server\]/ { in_server = 1; next }
-    /^\[/ && !/^\[server\]/ { in_server = 0; next }
-    in_server && $1 ~ key {
-        # 获取等号右边的值
-        val = $2
-        # 移除行内注释
-        sub(/#.*/, "", val)
-        # 去除首尾空格
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
-        # 去除引号
-        gsub(/^["'"'"']|["'"'"']$/, "", val)
-        if (val != "") {
-            print val
-            exit
-        }
-    }
-    ' "$CONFIG_FILE")
+    # 提取指定段内的键值（使用 sed 和 grep）
+    local raw_line
+    raw_line=$(sed -n "/^\[$section\]/,/^\[/p" "$CONFIG_FILE" \
+        | grep -E "^[[:space:]]*${key}[[:space:]]*=" \
+        | head -1)
+
+    if [ -z "$raw_line" ]; then
+        echo "$default"
+        return
+    fi
+
+    # 提取等号右侧的值，并清理
+    local value
+    value=$(echo "$raw_line" \
+        | cut -d'=' -f2- \
+        | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+              -e 's/^"//' -e 's/"$//' \
+              -e 's/[[:space:]]*#.*$//')
 
     if [ -n "$value" ]; then
         echo "$value"
@@ -82,17 +95,20 @@ get_config_value() {
     fi
 }
 
+# 加载服务器配置（从 [server] 段）
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
-        JAR=$(get_config_value "jar" "fabric-server.jar")
-        MIN_MEM=$(get_config_value "min_mem" "512M")
-        MAX_MEM=$(get_config_value "max_mem" "1G")
-        SESSION=$(get_config_value "session_name" "mc_server")
+        JAR=$(get_config_value "server" "jar" "fabric-server.jar")
+        MIN_MEM=$(get_config_value "server" "min_mem" "512M")
+        MAX_MEM=$(get_config_value "server" "max_mem" "1G")
+        SESSION=$(get_config_value "server" "session_name" "mc_server")
+        LOG_FILE=$(get_config_value "server" "log_file" "logs/latest.log")
     else
         JAR="fabric-server.jar"
         MIN_MEM="512M"
         MAX_MEM="1G"
         SESSION="mc_server"
+        LOG_FILE="logs/latest.log"
     fi
 }
 
@@ -141,6 +157,8 @@ check_config() {
 }
 
 check_server_jar() {
+    # 确保配置已加载
+    load_config
     if [ ! -f "$JAR" ]; then
         log_error "服务器核心不存在: $JAR"
         log_info "请下载 fabric-server.jar 并放置在当前目录"
@@ -153,7 +171,7 @@ check_rust_binary() {
     if find_rust_binary; then
         return 0
     fi
-    log_warn "MC-Minder 二进制文件不存在: $RUST_BIN"
+    log_warn "MC-Minder 二进制文件不存在"
     log_info "请从 GitHub Releases 下载或从源码编译:"
     log_info "  https://github.com/SharkMI-0x7E/mc-minder/releases"
     log_info ""
@@ -229,7 +247,7 @@ start_background() {
             done
         ) &
         WATCHDOG_PID=$!
-        echo $WATCHDOG_PID > /tmp/mc-minder-watchdog.pid
+        echo $WATCHDOG_PID > "$WATCHDOG_PID_FILE"
         log_info "看门狗已启动 (PID: $WATCHDOG_PID)"
     fi
     
@@ -239,10 +257,10 @@ start_background() {
 stop_server() {
     log_info "正在停止服务器..."
     
-    if [ -f /tmp/mc-minder-watchdog.pid ]; then
-        WATCHDOG_PID=$(cat /tmp/mc-minder-watchdog.pid)
+    if [ -f "$WATCHDOG_PID_FILE" ]; then
+        WATCHDOG_PID=$(cat "$WATCHDOG_PID_FILE")
         kill "$WATCHDOG_PID" 2>/dev/null
-        rm -f /tmp/mc-minder-watchdog.pid
+        rm -f "$WATCHDOG_PID_FILE"
         log_info "看门狗已停止"
     fi
     
@@ -303,8 +321,8 @@ status_server() {
         echo -e "MC-Minder: ${RED}未运行${NC}"
     fi
     
-    if [ -f /tmp/mc-minder-watchdog.pid ]; then
-        WATCHDOG_PID=$(cat /tmp/mc-minder-watchdog.pid)
+    if [ -f "$WATCHDOG_PID_FILE" ]; then
+        WATCHDOG_PID=$(cat "$WATCHDOG_PID_FILE")
         if kill -0 "$WATCHDOG_PID" 2>/dev/null; then
             echo -e "看门狗:    ${GREEN}运行中${NC} (PID: $WATCHDOG_PID)"
         else
@@ -330,6 +348,8 @@ attach_server() {
 }
 
 show_logs() {
+    # 确保日志文件路径已加载
+    load_config
     if [ -f "$LOG_FILE" ]; then
         log_info "显示服务器日志最后 50 行..."
         tail -n 50 "$LOG_FILE"

@@ -259,16 +259,6 @@ sed -i 's/\r$//' *.sh
 
 本项目已在 `.gitattributes` 中配置 `*.sh text eol=lf`，Git 检出时会自动使用 LF 换行符。
 
-## 版本历史
-
-详见 [CHANGELOG](https://github.com/SharkMI-0x7E/mc-minder/releases) 或 [GitHub Releases](https://github.com/SharkMI-0x7E/mc-minder/releases)
-
-### 最近更新 (v0.3.11)
-- 修复脚本函数定义顺序错误
-- 修复 grep 正则表达式兼容性问题
-- 改进 JVM 配置支持
-- 优化 ARM64 架构检测提示
-
 ## 贡献
 
 欢迎贡献！请随时提交 Pull Request。
