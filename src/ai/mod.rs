@@ -37,7 +37,15 @@ pub struct Message {
 
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
-    choices: Vec<Choice>,
+    choices: Option<Vec<Choice>>,
+    error: Option<ApiError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiError {
+    message: String,
+    #[serde(rename = "type")]
+    error_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,16 +53,28 @@ struct Choice {
     message: Message,
 }
 
+// Ollama /api/chat 端点请求格式
 #[derive(Debug, Serialize)]
-struct OllamaRequest {
+struct OllamaChatRequest {
     model: String,
-    prompt: String,
+    messages: Vec<OllamaMessage>,
     stream: bool,
 }
 
+#[derive(Debug, Serialize, Clone)]
+struct OllamaMessage {
+    role: String,
+    content: String,
+}
+
 #[derive(Debug, Deserialize)]
-struct OllamaResponse {
-    response: String,
+struct OllamaChatResponse {
+    message: OllamaResponseMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaResponseMessage {
+    content: String,
 }
 
 pub enum ChatResult {
@@ -93,7 +113,9 @@ impl AiClient {
             }
         }
 
-        let _permit = self.semaphore.acquire().await;
+        let _permit = timeout(Duration::from_secs(10), self.semaphore.acquire())
+            .await
+            .context("AI request timeout: too many concurrent requests")?;
         
         {
             let mut last_requests = self.last_request.write();
@@ -139,21 +161,26 @@ impl AiClient {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => format!("<failed to read error response: {}>", e),
+            };
             
             if status.as_u16() == 401 {
                 bail!(
                     "OpenAI API authentication failed. \n\
-                     Please check that api_key in config.toml is correct."
+                     Please check that api_key in config.toml is correct.\n\
+                     Response: {}", body
                 );
             } else if status.as_u16() == 429 {
                 bail!(
-                    "OpenAI API rate limit exceeded. Please try again later."
+                    "OpenAI API rate limit exceeded. Please try again later.\n\
+                     Response: {}", body
                 );
             }
             
             warn!("OpenAI API error: {} - {}", status, body);
-            bail!("OpenAI API returned error: {}", status);
+            bail!("OpenAI API returned error: {} - {}", status, body);
         }
 
         let chat_response: ChatResponse = response
@@ -161,30 +188,40 @@ impl AiClient {
             .await
             .context("Failed to parse OpenAI response")?;
 
+        // 检查 API 错误
+        if let Some(error) = chat_response.error {
+            bail!("OpenAI API error: {}", error.message);
+        }
+
+        // 获取响应内容
         chat_response
             .choices
-            .first()
-            .map(|c| c.message.content.clone())
-            .ok_or_else(|| anyhow::anyhow!("No response from OpenAI"))
+            .and_then(|c| c.first().map(|c| c.message.content.clone()))
+            .ok_or_else(|| anyhow::anyhow!("No response from AI API"))
     }
 
     async fn chat_ollama(&self, ollama: &OllamaConfig, messages: Vec<Message>) -> Result<String> {
-        let prompt = messages
-            .iter()
-            .map(|m| format!("{}: {}", m.role, m.content))
-            .collect::<Vec<_>>()
-            .join("\n");
+        // 转换为 Ollama 格式（使用 /api/chat 端点）
+        let ollama_messages: Vec<OllamaMessage> = messages
+            .into_iter()
+            .map(|m| OllamaMessage {
+                role: m.role,
+                content: m.content,
+            })
+            .collect();
 
-        let request = OllamaRequest {
+        // 构造 /api/chat 请求
+        let chat_url = ollama.url.replace("/api/generate", "/api/chat");
+        let request = OllamaChatRequest {
             model: ollama.model.clone(),
-            prompt,
+            messages: ollama_messages,
             stream: false,
         };
 
-        debug!("Sending request to Ollama API");
+        debug!("Sending request to Ollama /api/chat: {}", chat_url);
 
         let response = self.client
-            .post(&ollama.url)
+            .post(&chat_url)
             .json(&request)
             .send()
             .await
@@ -192,17 +229,20 @@ impl AiClient {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => format!("<failed to read error response: {}>", e),
+            };
             warn!("Ollama API error: {} - {}", status, body);
-            bail!("Ollama API returned error: {}", status);
+            bail!("Ollama API returned error: {} - {}", status, body);
         }
 
-        let ollama_response: OllamaResponse = response
+        let ollama_response: OllamaChatResponse = response
             .json()
             .await
             .context("Failed to parse Ollama response")?;
 
-        Ok(ollama_response.response)
+        Ok(ollama_response.message.content)
     }
 
     pub fn get_trigger(&self) -> &str {
