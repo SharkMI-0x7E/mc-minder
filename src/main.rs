@@ -577,38 +577,53 @@ async fn run_server(args: Args) -> Result<()> {
                         info!("[Chat] {}: {}", msg.player, msg.content);
 
                         if let (Some(ref ai), Some(ref trig)) = (&ai_client, &trigger) {
+                            debug!("[AI] Checking trigger '{}' in message: '{}'", trig, msg.content);
                             if msg.content.starts_with(trig) {
                                 let question = msg.content.trim_start_matches(trig).trim();
+                                debug!("[AI] Trigger detected! Question: '{}', Player: '{}'", question, msg.player);
                                 if !question.is_empty() {
                                     context.add_user_message(question, &msg.player);
 
                                     let messages = context.get_messages_for_player(&msg.player);
                                     let player = msg.player.clone();
                                     
+                                    debug!("[AI] Sending request to AI backend...");
                                     match ai.chat(messages, &player).await {
                                         Ok(ChatResult::Success(response)) => {
+                                            debug!("[AI] Received response: '{}'", response);
                                             context.add_assistant_message(&response);
                                             
                                             let mut rcon_guard = rcon.write().await;
                                             if let Some(ref mut rcon_client) = *rcon_guard {
                                                 let tell_msg = format!("[AI] {}", response);
                                                 if let Err(e) = rcon_client.tell(&msg.player, &tell_msg).await {
-                                                    warn!("Failed to send AI response: {}", e);
+                                                    warn!("Failed to send AI response to player '{}': {}", msg.player, e);
+                                                } else {
+                                                    debug!("[AI] Successfully sent response to player '{}'", msg.player);
                                                 }
+                                            } else {
+                                                warn!("[AI] RCON connection not available, cannot send response");
                                             }
                                         }
                                         Ok(ChatResult::RateLimited(rate_limit_msg)) => {
+                                            debug!("[AI] Player '{}' rate limited", player);
                                             let mut rcon_guard = rcon.write().await;
                                             if let Some(ref mut rcon_client) = *rcon_guard {
-                                                let _ = rcon_client.tell(&player, &rate_limit_msg).await;
+                                                if let Err(e) = rcon_client.tell(&player, &rate_limit_msg).await {
+                                                    warn!("Failed to send rate limit message: {}", e);
+                                                }
+                                            } else {
+                                                warn!("[AI] RCON connection not available, rate limit message dropped");
                                             }
                                         }
                                         Err(e) => {
-                                            warn!("AI chat error: {}", e);
+                                            warn!("[AI] Chat error for player '{}': {}", msg.player, e);
                                         }
                                     }
                                 }
                             }
+                        } else {
+                            debug!("[AI] AI client or trigger not configured, ignoring chat message");
                         }
                     }
                     LogEvent::PlayerJoin(player) => {

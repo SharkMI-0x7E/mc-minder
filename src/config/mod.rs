@@ -180,8 +180,13 @@ impl Config {
         let mut config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config file")?;
         
+        // 检查 AI 配置：如果使用 Ollama，不需要 api_url/api_key
         if let Some(ref ai) = config.ai {
-            if ai.api_key.is_empty() || ai.api_url.is_empty() {
+            let using_ollama = config.ollama.as_ref().map(|o| o.enabled).unwrap_or(false);
+            
+            // 如果使用 Ollama，即使 api_key/api_url 为空也保留 AI 配置
+            if !using_ollama && (ai.api_key.is_empty() || ai.api_url.is_empty()) {
+                warn!("AI configuration incomplete (api_key or api_url is empty) and Ollama is not enabled. AI features will be disabled.");
                 config.ai = None;
             }
         }
