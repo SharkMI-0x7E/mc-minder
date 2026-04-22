@@ -231,14 +231,12 @@ impl LogMonitor {
         let mut buffer = Vec::with_capacity(bytes_to_read);
         file.take(bytes_to_read as u64).read_to_end(&mut buffer)?;
 
-        String::from_utf8(buffer)
+        String::from_utf8(buffer.clone())
             .map_err(|e| {
-                // 使用 lossy 转换，保留有效字符并替换无效字节
-                let lossy = String::from_utf8_lossy(e.as_bytes());
+                let lossy = String::from_utf8_lossy(&buffer);
                 warn!("UTF-8 decode error, using lossy conversion: {}", e);
                 anyhow::anyhow!("Failed to convert file content to UTF-8: {}", lossy)
             })
-            // 如果失败，使用 lossy 转换作为后备
             .or_else(|_| Ok(String::from_utf8_lossy(&buffer).into_owned()))
     }
 
