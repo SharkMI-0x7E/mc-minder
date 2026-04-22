@@ -104,7 +104,7 @@ impl RconClient {
 
         let payload_bytes = packet.payload.as_bytes();
         // RCON 协议：length = 4(id) + 4(type) + payload_len + 1(null)
-        let length = (4 + 4 + payload_bytes.len() as i32 + 1) as i32;
+        let length = 4 + 4 + payload_bytes.len() as i32 + 1;
 
         let mut buf = Vec::with_capacity(4 + length as usize);
         // RCON 使用小端序 (Little Endian)
@@ -169,7 +169,7 @@ impl RconClient {
             .context("Failed to read packet length")?;
         let length = i32::from_le_bytes(length_buf);
         
-        if length < 10 || length > 4096 {
+        if !(10..=4096).contains(&length) {
             bail!("Invalid RCON packet length: {}", length);
         }
         

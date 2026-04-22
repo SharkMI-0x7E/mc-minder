@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
+use tokio::time::timeout;
 use parking_lot::RwLock;
 use crate::config::{AiConfig, OllamaConfig};
 
@@ -44,8 +45,6 @@ struct ChatResponse {
 #[derive(Debug, Deserialize)]
 struct ApiError {
     message: String,
-    #[serde(rename = "type")]
-    error_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

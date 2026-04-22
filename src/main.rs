@@ -231,6 +231,7 @@ async fn run_init() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_config_content(
     rcon_password: &str,
     api_url: &str,
