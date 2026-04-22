@@ -103,14 +103,16 @@ impl RconClient {
         let stream = self.stream.as_mut().context("Not connected to RCON")?;
 
         let payload_bytes = packet.payload.as_bytes();
-        let length = 10 + payload_bytes.len() as i32;
+        // RCON 协议：length = 4(id) + 4(type) + payload_len + 1(null)
+        let length = (4 + 4 + payload_bytes.len() as i32 + 1) as i32;
 
-        let mut buf = Vec::with_capacity(length as usize + 4);
-        buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(&packet.id.to_be_bytes());
-        buf.extend_from_slice(&packet.packet_type.to_be_bytes());
+        let mut buf = Vec::with_capacity(4 + length as usize);
+        // RCON 使用小端序 (Little Endian)
+        buf.extend_from_slice(&length.to_le_bytes());
+        buf.extend_from_slice(&packet.id.to_le_bytes());
+        buf.extend_from_slice(&packet.packet_type.to_le_bytes());
         buf.extend_from_slice(payload_bytes);
-        buf.extend_from_slice(&[0, 0]);
+        buf.push(0);  // 只有 1 个 null 字节
 
         timeout(WRITE_TIMEOUT, stream.write_all(&buf))
             .await
@@ -121,7 +123,7 @@ impl RconClient {
             .await
             .context("RCON flush timeout")?;
 
-        debug!("Sent RCON packet: id={}, type={}", packet.id, packet.packet_type);
+        debug!("Sent RCON packet: id={}, type={}, length={}", packet.id, packet.packet_type, length);
         Ok(())
     }
 
@@ -159,45 +161,42 @@ impl RconClient {
     async fn read_packet(&mut self) -> Result<Packet> {
         let stream = self.stream.as_mut().context("Not connected to RCON")?;
         
+        // 读取长度字段（小端序）
         let mut length_buf = [0u8; 4];
         timeout(READ_TIMEOUT, stream.read_exact(&mut length_buf))
             .await
             .context("RCON read length timeout")?
             .context("Failed to read packet length")?;
-        let length = i32::from_be_bytes(length_buf);
+        let length = i32::from_le_bytes(length_buf);
         
-        let mut header_buf = [0u8; 8];
-        timeout(READ_TIMEOUT, stream.read_exact(&mut header_buf))
-            .await
-            .context("RCON read header timeout")?
-            .context("Failed to read packet header")?;
-        let id = i32::from_be_bytes([header_buf[0], header_buf[1], header_buf[2], header_buf[3]]);
-        let packet_type = i32::from_be_bytes([header_buf[4], header_buf[5], header_buf[6], header_buf[7]]);
-        
-        let payload_length = (length - 10) as usize;
-        if payload_length > 4096 {
-            bail!("RCON packet too large: {} bytes", payload_length);
+        if length < 10 || length > 4096 {
+            bail!("Invalid RCON packet length: {}", length);
         }
         
-        let mut payload = vec![0u8; payload_length];
-        if payload_length > 0 {
-            timeout(READ_TIMEOUT, stream.read_exact(&mut payload))
-                .await
-                .context("RCON read payload timeout")?
-                .context("Failed to read packet payload")?;
-        }
-        
-        let mut padding = [0u8; 2];
-        timeout(READ_TIMEOUT, stream.read_exact(&mut padding))
+        // 读取剩余数据（id + type + payload + null）
+        let mut data = vec![0u8; length as usize];
+        timeout(READ_TIMEOUT, stream.read_exact(&mut data))
             .await
-            .context("RCON read padding timeout")?
-            .context("Failed to read packet padding")?;
+            .context("RCON read packet data timeout")?
+            .context("Failed to read packet data")?;
         
-        let payload = String::from_utf8_lossy(&payload)
-            .trim_end_matches('\0')
-            .to_string();
+        // 解析字段（小端序）
+        let id = i32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let packet_type = i32::from_le_bytes([data[4], data[5], data[6], data[7]]);
         
-        debug!("Received RCON packet: id={}, type={}, payload_len={}", id, packet_type, payload.len());
+        // payload 长度 = total - 4(id) - 4(type) - 1(null)
+        let payload_length = (length - 4 - 4 - 1) as usize;
+        let payload = if payload_length > 0 {
+            String::from_utf8_lossy(&data[8..8 + payload_length])
+                .trim_end_matches('\0')
+                .to_string()
+        } else {
+            String::new()
+        };
+        
+        debug!("Received RCON packet: id={}, type={}, payload_len={}, payload='{}'", 
+               id, packet_type, payload.len(), 
+               if payload.len() > 50 { &payload[..50] } else { &payload });
         
         Ok(Packet {
             id,
