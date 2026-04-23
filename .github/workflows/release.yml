@@ -40,16 +40,11 @@ jobs:
           mv target/release/mc-minder mc-minder-x86_64-linux
           chmod +x mc-minder-x86_64-linux
 
-      - name: Generate SHA256 checksum
-        run: sha256sum mc-minder-x86_64-linux > mc-minder-x86_64-linux.sha256
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mc-minder-x86_64-linux
-          path: |
-            mc-minder-x86_64-linux
-            mc-minder-x86_64-linux.sha256
+          path: mc-minder-x86_64-linux
 
   build-termux-aarch64:
     name: Build Termux ARM64
@@ -88,16 +83,11 @@ jobs:
           mv target/aarch64-linux-android/release/mc-minder mc-minder-termux-aarch64
           chmod +x mc-minder-termux-aarch64
 
-      - name: Generate SHA256 checksum
-        run: sha256sum mc-minder-termux-aarch64 > mc-minder-termux-aarch64.sha256
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mc-minder-termux-aarch64
-          path: |
-            mc-minder-termux-aarch64
-            mc-minder-termux-aarch64.sha256
+          path: mc-minder-termux-aarch64
 
   release:
     needs: [build-linux-x86_64, build-termux-aarch64]
@@ -175,24 +165,9 @@ jobs:
             ```bash
             curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
             ```
-            
-            ### 功能特性
-            
-            - 日志监控：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
-            - AI 聊天机器人：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发
-            - RCON 通信：异步 RCON 协议实现，自动重连
-            - 上下文记忆：按玩家保存对话历史
-            - HTTP API：RESTful API 用于状态查询和命令执行
-            - TUI 启动脚本：基于 dialog 的图形化管理界面
-            - JVM 配置支持：自定义 GC 算法和 JVM 参数
-            - Telegram 通知：服务器事件实时推送
-            - 一键安装：交互式初始化配置
-            - 自动更新：内置 self-update 命令
           files: |
             binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
-            binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux.sha256
             binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
-            binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64.sha256
             install.sh
           draft: false
           prerelease: false

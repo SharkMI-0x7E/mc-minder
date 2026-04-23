@@ -1,33 +1,62 @@
 # MC-Minder
 
+[![Build and Release](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml/badge.svg)](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml)
 [![Crates.io](https://img.shields.io/crates/v/mc-minder.svg)](https://crates.io/crates/mc-minder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
 English | [中文](./README.md)
 
-A smart management suite for Minecraft Fabric servers on Termux/Android.
+A smart management suite for Minecraft Fabric servers, supporting Linux and Termux/Android environments.
 
-> This project was written with AI assistance.
+> This project was born from the need to manage Minecraft servers more conveniently on Termux.
 
-## Features
+> 99.2% of this project was written by AI (v0.3.15 onwards uses Opencode, before that used Trae CN).
 
-- **Log Monitoring**: Real-time monitoring of server logs, parsing chat/join/leave/death events
-- **AI Chatbot**: Support for OpenAI API and Ollama, triggered by `!` prefix
-- **RCON Communication**: Native RCON protocol implementation for sending commands and messages
-- **Context Memory**: Per-player conversation history with automatic expiration
-- **HTTP API**: RESTful API for status queries, history, and command execution
-- **Shell Scripts**: Integrated start/stop/monitor/backup management
+## Quick Start
 
-## Installation
+### One-click Install
 
-### From crates.io
+```bash
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+```
+
+### Initialize Configuration
+
+```bash
+./mc-minder init
+```
+
+This will guide you through:
+1. Setting RCON password
+2. Choosing whether to enable AI features
+3. Configuring server memory and session name
+
+### Start Server
+
+```bash
+./start-tui.sh
+```
+
+## Installation Methods
+
+### Method 1: Pre-compiled Binary (Recommended)
+
+```bash
+# Download install script
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+
+# Initialize configuration
+./mc-minder init
+```
+
+### Method 2: Install from crates.io
 
 ```bash
 cargo install mc-minder
 ```
 
-### From Source
+### Method 3: Build from Source
 
 ```bash
 git clone https://github.com/SharkMI-0x7E/mc-minder.git
@@ -35,7 +64,7 @@ cd mc-minder
 cargo build --release
 ```
 
-### For Termux/Android (aarch64)
+### Termux/Android (aarch64)
 
 ```bash
 cargo build --target aarch64-linux-android --release
@@ -43,43 +72,44 @@ cargo build --target aarch64-linux-android --release
 
 ## Usage
 
-### 1. Directory Structure
+### Directory Structure
 
 ```
 MC_server/                      # Server root directory
 ├── fabric-server.jar           # Server core
-├── server.properties           # Server config (port, IP, etc. configured here)
-├── start.sh                    # Startup script (copy from scripts/)
+├── server.properties           # Server configuration
+├── mc-minder                   # MC-Minder binary
+├── start-tui.sh                # TUI startup script (graphical interface)
+├── backup.sh                   # Backup script
 ├── config.toml                 # MC-Minder configuration file
 ├── logs/
-│   └── latest.log
-├── world/
-└── mc-minder/                  # This project
-    ├── Cargo.toml
-    ├── src/
-    └── target/release/mc-minder
+│   ├── latest.log              # Server log
+│   └── mc-minder.log           # MC-Minder log
+└── world/
 ```
 
-### 2. Configuration
+### Configuration
 
-**Server Configuration** (port, server name, IP, etc.) should be configured in `server.properties`, which is the native Minecraft configuration file.
+**Server Configuration** (port, server name, IP, etc.) should be configured in `server.properties`.
 
-**MC-Minder Configuration**: Copy `config.example.toml` to your server root directory and rename to `config.toml`:
-
-```bash
-cp mc-minder/config.example.toml ./config.toml
-```
-
-Edit `config.toml`:
+**MC-Minder Configuration**: Edit `config.toml`:
 
 ```toml
+# Server configuration
+[server]
+jar = "fabric-server.jar"
+min_mem = "512M"
+max_mem = "1G"
+session_name = "mc_server"
+log_file = "logs/latest.log"
+
 # RCON Configuration - Required for MC-Minder to communicate with Minecraft server
 [rcon]
 host = "127.0.0.1"
 port = 25575
 password = "your_rcon_password"
 
-# AI Configuration - Leave empty or remove this section to disable AI features
+# AI Configuration - Leave empty to disable AI features
 [ai]
 api_url = ""
 api_key = ""
@@ -100,62 +130,54 @@ world_dir = "world"
 backup_dest = "../backups"
 retain_days = 7
 
-# Notification Configuration - Leave empty to disable notifications
+# Notification Configuration
 [notification]
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
 ```
 
-**Note**: Leave configuration items empty to disable that feature. For example:
-- Leaving `api_key` empty in `[ai]` section will disable AI features
-- Leaving `telegram_bot_token` empty in `[notification]` will disable Telegram notifications
-
-### 3. Windows/Linux Line Ending Issue
-
-If you edit scripts on Windows and get errors when running on Linux/Termux, you need to convert line endings:
+### Startup Script Commands
 
 ```bash
-# Method 1: Using dos2unix
-dos2unix start.sh
-dos2unix backup.sh
-
-# Method 2: Using sed
-sed -i 's/\r$//' start.sh
-sed -i 's/\r$//' backup.sh
-
-# Method 3: Batch conversion
-sed -i 's/\r$//' *.sh
+./start-tui.sh           # Start TUI management interface (recommended)
 ```
 
-### 4. Start the Server
+**TUI Management Interface Features**:
+- Start server (background/foreground mode)
+- Stop/Restart server
+- View server status and logs
+- Initialize configuration
+- Update MC-Minder
+- Java version management (switch/install)
+- Language switching (Chinese/English)
+
+### MC-Minder Command Line
 
 ```bash
-# Copy scripts to server root
-cp mc-minder/scripts/start.sh ./
-
-# Start
-./start.sh start
-
-# Stop
-./start.sh stop
-
-# Status
-./start.sh status
-
-# Attach to console
-./start.sh attach
+./mc-minder init          # Interactive initialization
+./mc-minder gen-config    # Generate default config file
+./mc-minder gen-start     # Generate start-tui.sh
+./mc-minder gen-backup    # Generate backup.sh
+./mc-minder self-update   # Update to latest version
+./mc-minder config        # Show current configuration
+./mc-minder config get <key>  # Get config value (e.g., backup_dest)
+./mc-minder --help        # Show help
 ```
 
-### 5. AI Chat Usage
+### AI Chat Usage
 
-Players can trigger AI responses by prefixing their message with `!`:
+Players trigger AI responses by prefixing messages with `!`:
 
 ```
 !hello
 !help
 !how to make a diamond sword?
 ```
+
+**Rate Limiting**:
+- Minimum 2-second interval between requests from the same player
+- Maximum 3 concurrent requests
 
 ## HTTP API
 
@@ -177,40 +199,23 @@ curl -X POST http://localhost:8080/command \
   -d '{"command": "list"}'
 ```
 
-## Project Structure
-
-```
-mc-minder/
-├── Cargo.toml              # Rust project configuration
-├── config.example.toml     # Configuration example
-├── README.md               # Chinese documentation
-├── README_en.md            # English documentation
-├── LICENSE                 # MIT License
-├── .gitignore
-├── scripts/
-│   ├── start.sh            # Startup script
-│   └── backup.sh           # Backup utility
-└── src/
-    ├── main.rs             # Main entry point
-    ├── lib.rs              # Library exports
-    ├── config/             # Configuration module
-    ├── monitor/            # Log monitoring module
-    ├── ai/                 # AI client module
-    ├── rcon/               # RCON protocol module
-    ├── context/            # Context management module
-    └── api/                # HTTP API module
-```
-
 ## Command Line Options
 
 ```
-mc-minder [OPTIONS]
+mc-minder [OPTIONS] [COMMAND]
+
+Commands:
+  init         Interactive configuration initialization
+  gen-config   Generate default config file
+  gen-start    Generate start-tui.sh script
+  gen-backup   Generate backup.sh script
+  self-update  Update to latest version
+  config       Show current configuration
 
 Options:
-  -c, --config <PATH>  Configuration file path [default: ../config.toml]
+  -c, --config <PATH>  Configuration file path [default: config.toml]
   -v, --verbose        Enable verbose logging
       --http-port      HTTP API port [default: 8080]
-      --log-file       Log file path [default: logs/latest.log]
   -h, --help           Show help
   -V, --version        Show version
 ```
@@ -218,25 +223,32 @@ Options:
 ## Backup
 
 ```bash
-# Create backup
-./backup.sh create
-
-# List backups
-./backup.sh list
-
-# Restore from backup
-./backup.sh restore ../backups/mc-backup-20240101-120000.tar.gz
-
-# Clean old backups
-./backup.sh clean
+./backup.sh create   # Create backup
+./backup.sh list     # List backups
+./backup.sh restore <file>  # Restore from backup
+./backup.sh clean    # Clean old backups
 ```
 
-## Requirements
+## System Requirements
 
-- Rust 1.70+
-- Java (for Minecraft server)
+- Rust 1.70+ (only needed for compilation)
+- Java 17+ (for Minecraft server)
 - tmux (for session management)
 - Optional: Ollama (for local AI)
+
+## Windows Line Ending Issues
+
+If you edit scripts on Windows and get errors when running on Linux/Termux (`$'\r': command not found`), convert line endings:
+
+```bash
+# Method 1: Using dos2unix
+dos2unix *.sh
+
+# Method 2: Using sed
+sed -i 's/\r$//' *.sh
+```
+
+This project has configured `*.sh text eol=lf` in `.gitattributes`, Git checkout will automatically use LF line endings.
 
 ## Contributing
 
@@ -254,7 +266,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- This project was written with AI assistance
+- 99.2% of this project was written by AI (v0.3.15 onwards uses Opencode, before that used Trae CN)
+- I don't really know Rust. Code before v0.3.14 (including v0.3.14) was written by Trae CN's agent. Code from v0.3.15 (including v0.3.15) onwards was written by Opencode.
 - Inspired by the need for lightweight Minecraft server management on mobile devices
 
 ## Author

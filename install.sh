@@ -61,8 +61,6 @@ check_dependencies() {
     local missing=()
     
     command -v curl >/dev/null 2>&1 || missing+=("curl")
-    command -v tar >/dev/null 2>&1 || missing+=("tar")
-    command -v sha256sum >/dev/null 2>&1 || missing+=("sha256sum")
     
     if [ ${#missing[@]} -ne 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
@@ -148,42 +146,12 @@ download_with_retry() {
     return 1
 }
 
-verify_checksum() {
-    local file="$1"
-    local expected_sha256="$2"
-    
-    if ! command -v sha256sum >/dev/null 2>&1; then
-        log_warn "sha256sum not found, skipping verification"
-        return 0
-    fi
-    
-    if [ -z "$expected_sha256" ]; then
-        log_warn "No checksum provided, skipping verification"
-        return 0
-    fi
-    
-    log_info "Verifying integrity of $(basename $file)..."
-    
-    local actual_sha256=$(sha256sum "$file" | awk '{print $1}')
-    
-    if [ "$actual_sha256" = "$expected_sha256" ]; then
-        log_info "Checksum verified: ${actual_sha256:0:16}...✓"
-        return 0
-    else
-        log_error "Checksum mismatch!"
-        log_error "Expected: ${expected_sha256:0:16}..."
-        log_error "Actual:   ${actual_sha256:0:16}..."
-        return 1
-    fi
-}
-
 download_binary() {
     local target="$1"
     local version="$2"
     
     local binary_name="$BINARY_NAME-$target"
     local url="https://github.com/$REPO/releases/download/v$version/$binary_name"
-    local sha256_url="https://github.com/$REPO/releases/download/v$version/$binary_name.sha256"
     
     log_info "Downloading MC-Minder v$version for $target..."
     
@@ -193,38 +161,12 @@ download_binary() {
     
     chmod +x "$BINARY_NAME"
     
-    local sha256_file="$BINARY_NAME.sha256"
-    if download_with_retry "$sha256_url" "$sha256_file" "checksum file"; then
-        local expected_sha256=$(cat "$sha256_file" | awk '{print $1}')
-        rm -f "$sha256_file"
-        
-        if ! verify_checksum "$BINARY_NAME" "$expected_sha256"; then
-            log_error "Binary verification failed! The file may be corrupted."
-            rm -f "$BINARY_NAME"
-            return 1
-        fi
-    else
-        log_warn "Could not download checksum file, skipping verification"
-        rm -f "$sha256_file"
-    fi
-    
     return 0
 }
 
 download_scripts() {
     local version="$1"
     local base_url="https://raw.githubusercontent.com/$REPO/v$version/scripts"
-    
-    if [ ! -f "start.sh" ]; then
-        log_info "Downloading start.sh..."
-        if download_with_retry "$base_url/start.sh" "start.sh" "startup script"; then
-            chmod +x "start.sh"
-        else
-            log_warn "Failed to download start.sh"
-        fi
-    else
-        log_info "start.sh already exists, skipping"
-    fi
     
     if [ ! -f "backup.sh" ]; then
         log_info "Downloading backup.sh..."
@@ -265,15 +207,11 @@ show_post_install_instructions() {
     echo -e "${BLUE}Next steps:${NC}"
     echo "  1. Run: ./$BINARY_NAME init          # Initialize configuration"
     echo "  2. Place fabric-server.jar here         # Minecraft server jar"
-    echo "  3. Run: ./start.sh start              # Start server (CLI mode)"
-    echo ""
-    echo -e "${BLUE}Alternative:${NC}"
-    echo "  Run: ./start-tui.sh                   # Start with TUI menu (requires dialog)"
+    echo "  3. Run: ./start-tui.sh                 # Start with TUI menu"
     echo ""
     echo -e "${BLUE}Useful commands:${NC}"
     echo "  ./$BINARY_NAME --version               # Show version"
     echo "  ./$BINARY_NAME self-update             # Update to latest version"
-    echo "  ./start.sh status                     # Check server status"
     echo ""
     echo -e "${BLUE}For more information:${NC} https://github.com/$REPO"
 }
