@@ -98,12 +98,15 @@ impl AiClient {
     }
 
     pub async fn chat(&self, messages: Vec<Message>, player: &str) -> Result<ChatResult> {
+        debug!("[AI] Chat request: player='{}', messages_count={}", player, messages.len());
+        
         {
             let last_requests = self.last_request.read();
             if let Some(last_time) = last_requests.get(player) {
                 let elapsed = last_time.elapsed();
                 if elapsed < Duration::from_secs(PLAYER_COOLDOWN_SECS) {
                     let wait_secs = PLAYER_COOLDOWN_SECS - elapsed.as_secs();
+                    debug!("[AI] Player '{}' rate limited, elapsed={}ms, wait={}s", player, elapsed.as_millis(), wait_secs);
                     return Ok(ChatResult::RateLimited(format!(
                         "Please wait {} seconds before asking again.",
                         wait_secs
@@ -112,6 +115,7 @@ impl AiClient {
             }
         }
 
+        debug!("[AI] Acquiring semaphore permit (max concurrent: {})", MAX_CONCURRENT_REQUESTS);
         let _permit = timeout(Duration::from_secs(10), self.semaphore.acquire())
             .await
             .context("AI request timeout: too many concurrent requests")?;
@@ -121,20 +125,29 @@ impl AiClient {
             last_requests.insert(player.to_string(), Instant::now());
         }
 
+        debug!("[AI] Routing to backend: ollama_enabled={}", 
+            self.ollama_config.as_ref().map_or(false, |o| o.enabled));
+        
         let result = if let Some(ref ollama) = self.ollama_config {
             if ollama.enabled {
+                debug!("[AI] Using Ollama backend");
                 self.chat_ollama(ollama, messages).await
             } else {
+                debug!("[AI] Using OpenAI-compatible backend");
                 self.chat_openai(messages).await
             }
         } else {
+            debug!("[AI] No Ollama config, using OpenAI-compatible backend");
             self.chat_openai(messages).await
         };
 
         match result {
-            Ok(response) => Ok(ChatResult::Success(response)),
+            Ok(response) => {
+                debug!("[AI] Chat successful, response_length={}", response.len());
+                Ok(ChatResult::Success(response))
+            }
             Err(e) => {
-                warn!("AI chat error: {}", e);
+                warn!("[AI] Chat error: {}", e);
                 Err(e)
             }
         }
@@ -147,9 +160,10 @@ impl AiClient {
             max_tokens: self.config.max_tokens,
             temperature: self.config.temperature,
         };
-        debug!("[AI] OpenAI request prepared: model={}, max_tokens={}, temperature={}", self.config.model, self.config.max_tokens, self.config.temperature);
+        debug!("[AI] OpenAI request: model={}, max_tokens={}, temperature={}, api_url={}", 
+            self.config.model, self.config.max_tokens, self.config.temperature, self.config.api_url);
 
-        debug!("Sending request to OpenAI API");
+        debug!("[AI] Sending request to OpenAI API...");
 
         let response = self.client
             .post(&self.config.api_url)
@@ -159,10 +173,15 @@ impl AiClient {
             .await
             .context("Failed to send request to OpenAI API. Please check your network connection and api_url in config.toml")?;
 
+        let status = response.status();
+        debug!("[AI] OpenAI API response status: {}", status);
+
         if !response.status().is_success() {
-            let status = response.status();
             let body = match response.text().await {
-                Ok(text) => text,
+                Ok(text) => {
+                    debug!("[AI] OpenAI error response body: {}", text);
+                    text
+                },
                 Err(e) => format!("<failed to read error response: {}>", e),
             };
             
@@ -179,10 +198,11 @@ impl AiClient {
                 );
             }
             
-            warn!("OpenAI API error: {} - {}", status, body);
+            warn!("[AI] OpenAI API error: {} - {}", status, body);
             bail!("OpenAI API returned error: {} - {}", status, body);
         }
 
+        debug!("[AI] Parsing OpenAI response...");
         let chat_response: ChatResponse = response
             .json()
             .await
@@ -190,17 +210,23 @@ impl AiClient {
 
         // 检查 API 错误
         if let Some(error) = chat_response.error {
+            debug!("[AI] OpenAI API returned error in response: {}", error.message);
             bail!("OpenAI API error: {}", error.message);
         }
 
         // 获取响应内容
-        chat_response
+        let content = chat_response
             .choices
             .and_then(|c| c.first().map(|c| c.message.content.clone()))
-            .ok_or_else(|| anyhow::anyhow!("No response from AI API"))
+            .ok_or_else(|| anyhow::anyhow!("No response from AI API"))?;
+        
+        debug!("[AI] OpenAI response parsed successfully, content_length={}", content.len());
+        Ok(content)
     }
 
     async fn chat_ollama(&self, ollama: &OllamaConfig, messages: Vec<Message>) -> Result<String> {
+        debug!("[AI] Preparing Ollama request: model={}, messages_count={}", ollama.model, messages.len());
+        
         // 转换为 Ollama 格式（使用 /api/chat 端点）
         let ollama_messages: Vec<OllamaMessage> = messages
             .into_iter()
@@ -218,8 +244,8 @@ impl AiClient {
             stream: false,
         };
 
-        debug!("Sending request to Ollama /api/chat: {}", chat_url);
-        debug!("[AI] Ollama request prepared: model={}, url={}", ollama.model, chat_url);
+        debug!("[AI] Sending request to Ollama /api/chat: {}", chat_url);
+        debug!("[AI] Ollama request: model={}, url={}", ollama.model, chat_url);
 
         let response = self.client
             .post(&chat_url)
@@ -228,21 +254,28 @@ impl AiClient {
             .await
             .context("Failed to send request to Ollama API. Please ensure Ollama is running and the URL in config.toml is correct")?;
 
+        let status = response.status();
+        debug!("[AI] Ollama API response status: {}", status);
+
         if !response.status().is_success() {
-            let status = response.status();
             let body = match response.text().await {
-                Ok(text) => text,
+                Ok(text) => {
+                    debug!("[AI] Ollama error response body: {}", text);
+                    text
+                },
                 Err(e) => format!("<failed to read error response: {}>", e),
             };
-            warn!("Ollama API error: {} - {}", status, body);
+            warn!("[AI] Ollama API error: {} - {}", status, body);
             bail!("Ollama API returned error: {} - {}", status, body);
         }
 
+        debug!("[AI] Parsing Ollama response...");
         let ollama_response: OllamaChatResponse = response
             .json()
             .await
             .context("Failed to parse Ollama response")?;
 
+        debug!("[AI] Ollama response parsed successfully, content_length={}", ollama_response.message.content.len());
         Ok(ollama_response.message.content)
     }
 

@@ -540,13 +540,16 @@ async fn run_server(args: Args) -> Result<()> {
     let rcon = Arc::new(RwLock::new(None));
     {
         let mut rcon_guard = rcon.write().await;
+        debug!("[RCON] Attempting to connect to {}:{}...", config.rcon.host, config.rcon.port);
         match rcon_client.connect().await {
             Ok(_) => {
                 *rcon_guard = Some(rcon_client);
                 info!("RCON connection established");
+                debug!("[RCON] Connection successful, rcon_client=Some");
             }
             Err(e) => {
                 warn!("Failed to connect to RCON: {}. Will retry later.", e);
+                debug!("[RCON] Connection failed, rcon_client=None, error: {}", e);
             }
         }
     }
@@ -564,7 +567,14 @@ async fn run_server(args: Args) -> Result<()> {
 
     info!("MC-Minder is running. Press Ctrl+C to stop.");
 
-    let trigger = ai_client.as_ref().map(|a| a.get_trigger().to_string());
+    let trigger = ai_client.as_ref().map(|a| {
+        let t = a.get_trigger().to_string();
+        debug!("[AI] Configuration loaded: trigger='{}', ai_client=Some", t);
+        t
+    });
+    if trigger.is_none() {
+        debug!("[AI] Configuration loaded: ai_client=None, AI features disabled");
+    }
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
@@ -578,10 +588,13 @@ async fn run_server(args: Args) -> Result<()> {
                         info!("[Chat] {}: {}", msg.player, msg.content);
 
                         if let (Some(ref ai), Some(ref trig)) = (&ai_client, &trigger) {
-                            debug!("[AI] Checking trigger '{}' in message: '{}'", trig, msg.content);
+                            debug!("[AI] Checking trigger '{}' in message: '{}', starts_with={}", trig, msg.content, msg.content.starts_with(trig));
                             if msg.content.starts_with(trig) {
                                 let question = msg.content.trim_start_matches(trig).trim();
                                 debug!("[AI] Trigger detected! Question: '{}', Player: '{}'", question, msg.player);
+                                if question.is_empty() {
+                                    debug!("[AI] Question is empty after removing trigger, ignoring");
+                                }
                                 if !question.is_empty() {
                                     context.add_user_message(question, &msg.player);
 
@@ -623,6 +636,8 @@ async fn run_server(args: Args) -> Result<()> {
                                         }
                                     }
                                 }
+                            } else {
+                                debug!("[AI] Message '{}' does not start with trigger '{}'", msg.content, trig);
                             }
                         } else {
                             debug!("[AI] AI client or trigger not configured, ignoring chat message");
