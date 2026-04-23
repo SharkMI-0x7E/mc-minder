@@ -126,7 +126,7 @@ impl AiClient {
         }
 
         debug!("[AI] Routing to backend: ollama_enabled={}", 
-            self.ollama_config.as_ref().map_or(false, |o| o.enabled));
+            self.ollama_config.as_ref().is_some_and(|o| o.enabled));
         
         let result = if let Some(ref ollama) = self.ollama_config {
             if ollama.enabled {

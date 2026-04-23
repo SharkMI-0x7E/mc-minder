@@ -53,5 +53,6 @@ termux_notify = true
 [jvm]
 gc = "G1GC"
 extra_flags = "-XX:+UseContainerSupport"
+jdk_path = ""  # Optional: Custom JDK path (e.g., "/usr/lib/jvm/java-17/bin/java")
 # xmx = ""  # Optional: Override max memory from server section
 # xms = ""  # Optional: Override min memory from server section

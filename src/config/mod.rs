@@ -154,6 +154,8 @@ pub struct JvmConfig {
     pub xmx: Option<String>,
     #[serde(default)]
     pub xms: Option<String>,
+    #[serde(default)]
+    pub jdk_path: Option<String>,
 }
 
 fn default_gc() -> String { "G1GC".to_string() }
@@ -165,6 +167,7 @@ impl Default for JvmConfig {
             extra_flags: String::new(),
             xmx: None,
             xms: None,
+            jdk_path: None,
         }
     }
 }
@@ -196,63 +199,8 @@ impl Config {
     }
 
     pub fn generate_template() -> String {
-        r#"# MC-Minder Configuration File
-# MC-Minder 配置文件
-
-# Server Configuration
-# 服务器配置
-[server]
-jar = "fabric-server.jar"
-min_mem = "512M"
-max_mem = "1G"
-session_name = "mc_server"
-log_file = "logs/latest.log"
-
-# RCON Configuration - Required for MC-Minder to communicate with Minecraft server
-# RCON 配置 - MC-Minder 与 Minecraft 服务器通信必需
-[rcon]
-host = "127.0.0.1"
-port = 25575
-password = "your_rcon_password"
-
-# AI Configuration - Leave empty or remove this section to disable AI features
-# AI 配置 - 留空或删除此部分可禁用 AI 功能
-[ai]
-api_url = ""
-api_key = ""
-model = "gpt-3.5-turbo"
-trigger = "!"
-max_tokens = 150
-temperature = 0.7
-
-# Ollama Configuration - Set enabled = true to use local AI
-# Ollama 配置 - 设置 enabled = true 使用本地 AI
-[ollama]
-enabled = false
-url = "http://localhost:11434/api/generate"
-model = "qwen:0.5b"
-
-# Backup Configuration
-# 备份配置
-[backup]
-world_dir = "world"
-backup_dest = "../backups"
-retain_days = 7
-
-# Notification Configuration - Leave empty to disable notifications
-# 通知配置 - 留空禁用通知功能
-[notification]
-telegram_bot_token = ""
-telegram_chat_id = ""
-termux_notify = true
-
-# JVM Configuration - Advanced JVM tuning options
-# JVM 配置 - 高级 JVM 调优选项
-[jvm]
-gc = "G1GC"
-extra_flags = ""
-# xmx = "2G"  # Uncomment to override server.max_mem
-# xms = "512M"  # Uncomment to override server.min_mem
-"#.to_string()
+        // Minimal, safe template with jdk_path option (non-raw string for stability)
+        let s = "# MC-Minder Configuration File\n[jvm]\ngc = \"G1GC\"\nextra_flags = \"\"\njdk_path = \"\"  # Optional: Custom JDK path\n# xmx = \"2G\"  # Uncomment to override server.max_mem\n# xms = \"512M\"  # Uncomment to override server.min_mem\n";
+        s.to_string()
     }
 }

@@ -91,6 +91,27 @@ switch_language() {
     esac
 }
 
+# ==================== 辅助函数：更新 TOML 配置 ====================
+update_toml_value() {
+    local section="$1"
+    local key="$2"
+    local value="$3"
+    local file="$CONFIG_FILE"
+    
+    # 如果 section 不存在，则创建
+    if ! grep -q "^\\[$section\\]" "$file" 2>/dev/null; then
+        echo "" >> "$file"
+        echo "[$section]" >> "$file"
+    fi
+    
+    # 如果 key 存在，则替换；否则追加
+    if grep -q "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null; then
+        sed -i "s/^\\([[:space:]]*${key}[[:space:]]*=\\).*/\\1 \"$value\"/" "$file"
+    else
+        echo "$key = \"$value\"" >> "$file"
+    fi
+}
+
 # ==================== Java 版本管理 ====================
 # 检测已安装的 Java 版本
 detect_java_versions() {
@@ -419,6 +440,30 @@ load_rcon_config() {
     debug_log "load_rcon_config: RCON_PORT='$RCON_PORT', RCON_PASS='$RCON_PASS'"
 }
 
+# 加载 JVM 配置（从 [jvm] 段）
+load_jvm_config() {
+    JDK_PATH=$(get_config_value "jvm" "jdk_path" "")
+    debug_log "load_jvm_config: JDK_PATH='$JDK_PATH'"
+}
+
+# 解析 Java 命令路径
+resolve_java_command() {
+    load_jvm_config
+    if [ -n "$JDK_PATH" ]; then
+        if [ -x "$JDK_PATH" ]; then
+            JAVA_CMD="$JDK_PATH"
+            debug_log "resolve_java_command: using configured JDK_PATH=$JDK_PATH"
+        else
+            debug_log "resolve_java_command: JDK_PATH='$JDK_PATH' is not executable, falling back to java"
+            log_warn "配置的 JDK 路径不可用: $JDK_PATH，使用系统默认 java"
+            JAVA_CMD="java"
+        fi
+    else
+        JAVA_CMD="java"
+        debug_log "resolve_java_command: no jdk_path configured, using system java"
+    fi
+}
+
 # 加载 AI 配置（从 [ai] 段）
 load_ai_config() {
     AI_PROVIDER="openai"
@@ -432,7 +477,10 @@ HTTP_PORT="8080"
 # ==================== 依赖检查函数 ====================
 check_dependencies() {
     local missing=()
-    command -v java >/dev/null 2>&1 || missing+=("java")
+    resolve_java_command
+    if [ "$JAVA_CMD" = "java" ]; then
+        command -v java >/dev/null 2>&1 || missing+=("java")
+    fi
     command -v tmux >/dev/null 2>&1 || missing+=("tmux")
     if [ ${#missing[@]} -ne 0 ]; then
         dialog --title "依赖检查失败" --msgbox "\n缺少以下依赖:\n\n  ${missing[*]}\n\n请先安装缺少的依赖后再继续。" 12 60
@@ -487,7 +535,8 @@ start_background() {
 
     tmux new-session -d -s "$SESSION" -x 120 -y 30
     tmux send-keys -t "$SESSION" "cd '$(pwd)'" Enter
-    tmux send-keys -t "$SESSION" "java -Xms$MIN_MEM -Xmx$MAX_MEM -jar $JAR nogui" Enter
+    resolve_java_command
+    tmux send-keys -t "$SESSION" "$JAVA_CMD -Xms$MIN_MEM -Xmx$MAX_MEM -jar $JAR nogui" Enter
 
     sleep 5
 
@@ -560,7 +609,8 @@ start_foreground() {
     echo -e "${YELLOW}[提示] 按 Ctrl+C 可停止服务器。${NC}"
     echo ""
 
-    java -Xms"$MIN_MEM" -Xmx"$MAX_MEM" -jar "$JAR" nogui
+    resolve_java_command
+    $JAVA_CMD -Xms"$MIN_MEM" -Xmx"$MAX_MEM" -jar "$JAR" nogui
 
     echo ""
     log_info "Minecraft 服务器已停止。"

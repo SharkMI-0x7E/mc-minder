@@ -455,6 +455,7 @@ fn get_config_value(path: &PathBuf, key: &str) -> Result<()> {
         "backup.world_dir" => config.backup.world_dir.clone(),
         "backup.backup_dest" => config.backup.backup_dest.clone(),
         "backup.retain_days" => config.backup.retain_days.to_string(),
+        "jvm.jdk_path" => config.jvm.jdk_path.clone().unwrap_or_default(),
         _ => {
             anyhow::bail!("Unknown config key: {}", key);
         }

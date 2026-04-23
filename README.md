@@ -7,7 +7,7 @@
 
 [English](./README_en.md) | 中文
 
-一个为 Minecraft Fabric 服务器设计的智能管理套件，支持 Linux 和 Termux/Android 环境。
+一个为 Minecraft Fabric 服务器设计的智能管理套件，支持 MacOS、Linux 和 Termux/Android 环境。
 
 > 本项目诞生于在 Termux 上更方便地管理 Minecraft 服务器的需求。
 
