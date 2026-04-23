@@ -247,6 +247,8 @@ impl LogMonitor {
         for line in content.lines() {
             if let Some(caps) = chat_pattern.captures(line) {
                 if let (Some(player), Some(content)) = (caps.get(2), caps.get(3)) {
+                    // Debug: log parsed chat events for troubleshooting
+                    debug!("[Monitor] Parsed chat event: player='{}', content='{}'", player.as_str(), content.as_str());
                     events.push(LogEvent::Chat(ChatMessage {
                         player: player.as_str().to_string(),
                         content: content.as_str().to_string(),

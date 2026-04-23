@@ -587,6 +587,7 @@ async fn run_server(args: Args) -> Result<()> {
 
                                     let messages = context.get_messages_for_player(&msg.player);
                                     let player = msg.player.clone();
+                                    debug!("[AI] Trigger '{}' detected from player '{}', question: '{}'", trig, player, question);
                                     
                                     debug!("[AI] Sending request to AI backend...");
                                     match ai.chat(messages, &player).await {
