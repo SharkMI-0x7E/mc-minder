@@ -389,11 +389,11 @@ async fn run_self_update() -> Result<()> {
     }
     
     let target = if cfg!(target_os = "android") {
-        "aarch64-linux-android"
+        "termux-aarch64"
     } else if cfg!(target_arch = "x86_64") {
-        "x86_64-unknown-linux-musl"
+        "x86_64-linux"
     } else {
-        "aarch64-unknown-linux-musl"
+        "aarch64-linux"
     };
     
     let download_url = format!(
@@ -592,7 +592,7 @@ async fn run_server(args: Args) -> Result<()> {
                                     match ai.chat(messages, &player).await {
                                         Ok(ChatResult::Success(response)) => {
                                             debug!("[AI] Received response: '{}'", response);
-                                            context.add_assistant_message(&response);
+                                            context.add_assistant_message_for_player(&response, &msg.player);
                                             
                                             let mut rcon_guard = rcon.write().await;
                                             if let Some(ref mut rcon_client) = *rcon_guard {

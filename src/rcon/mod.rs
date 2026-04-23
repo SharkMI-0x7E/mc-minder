@@ -221,10 +221,18 @@ impl RconClient {
     }
 
     pub async fn tell(&mut self, player: &str, message: &str) -> Result<()> {
-        let safe_message = message
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n");
+        let safe_message: String = message
+            .chars()
+            .map(|c| match c {
+                '\\' => "\\\\".to_string(),
+                '"' => "\\\"".to_string(),
+                '\n' => "\\n".to_string(),
+                '\r' => "\\r".to_string(),
+                '\t' => "\\t".to_string(),
+                c if c.is_control() => format!("\\u{:04x}", c as u32),
+                c => c.to_string(),
+            })
+            .collect();
         let command = format!("tellraw {} {{\"text\":\"{}\"}}", player, safe_message);
         self.execute(&command).await?;
         Ok(())

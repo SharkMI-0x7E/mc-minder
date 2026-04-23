@@ -51,8 +51,13 @@ impl ContextManager {
         self.add_message("user", content, Some(player));
     }
 
+    #[allow(dead_code)]
     pub fn add_assistant_message(&self, content: &str) {
         self.add_message("assistant", content, None);
+    }
+
+    pub fn add_assistant_message_for_player(&self, content: &str, player: &str) {
+        self.add_message("assistant", content, Some(player));
     }
 
     pub fn add_system_message(&self, content: &str) {
