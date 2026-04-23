@@ -7,7 +7,7 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.3.17 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.4.0 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能
@@ -157,17 +157,64 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 - GitHub Actions 构建失败时，检查 job 日志获取详细错误信息
 
 ## 文件结构
+
+### 核心源代码结构
 ```
 mc-minder/
+├── src/
+│   ├── main.rs              # 入口点 - 薄层分发器
+│   ├── cli.rs               # 命令行参数解析
+│   ├── config.rs            # 配置加载和管理
+│   ├── banner.rs            # 横幅打印和日志初始化
+│   ├── init.rs              # 交互式初始化配置
+│   ├── self_update.rs       # 自动更新功能
+│   ├── server_run.rs        # 服务器运行主循环
+│   │
+│   ├── monitor.rs           # 日志监控模块
+│   ├── ai.rs                # AI 聊天机器人
+│   ├── rcon.rs              # RCON 通信协议
+│   ├── context.rs           # 对话上下文管理
+│   ├── api.rs               # HTTP API 服务器
+│   └── notification.rs      # 通知服务（Telegram 等）
+├── scripts/                 # Shell 脚本库
+│   ├── start-tui.sh         # TUI 启动脚本
+│   ├── backup.sh            # 备份脚本
+│   ├── install_oh_my_opencode.sh  # oh-my-opencode 安装脚本
+│   └── lib/                 # 脚本库
+│       ├── common.sh        # 通用函数
+│       ├── config.sh        # 配置读取
+│       ├── java.sh          # Java 版本管理
+│       ├── server.sh        # 服务器控制
+│       ├── log.sh           # 日志查看
+│       └── menu.sh          # TUI 菜单
 ├── .github/
 │   └── workflows/
-│       └── release.yml          # CI/CD 发布工作流
-├── src/
-│   └── main.rs                  # 入口点
-├── Cargo.toml                   # 项目配置和依赖
-├── Cross.toml                   # Cross 交叉编译配置
-├── install.sh                   # 安装脚本
-└── AGENTS.md                    # 本文件 - AI 上下文
+│       └── release.yml      # CI/CD 发布工作流
+├── Cargo.toml               # 项目配置和依赖
+├── Cross.toml               # Cross 交叉编译配置
+├── install.sh               # 一键安装脚本
+├── AGENTS.md                # 本文件 - AI 上下文
+├── README.md                # 中文说明文档
+└── README_en.md             # 英文说明文档
+```
+
+### 模块职责
+
+| 模块 | 职责 | 关键功能 |
+|------|------|----------|
+| `main.rs` | 入口点 | 参数解析、模块分发 |
+| `cli.rs` | CLI | clap 参数定义、命令处理 |
+| `config.rs` | 配置 | toml 加载、配置验证 |
+| `banner.rs` | 横幅/日志 | 打印版本、env_logger 初始化 |
+| `init.rs` | 初始化 | 交互式配置生成、脚本生成 |
+| `self_update.rs` | 更新 | GitHub Release 检查、二进制替换 |
+| `server_run.rs` | 运行 | 事件循环、组件协调 |
+| `monitor.rs` | 监控 | notify 文件监控、日志解析 |
+| `ai.rs` | AI | OpenAI/Ollama 客户端、限流 |
+| `rcon.rs` | RCON | 异步 RCON 协议、自动重连 |
+| `context.rs` | 上下文 | 对话历史、过期清理 |
+| `api.rs` | API | warp HTTP 服务器、端点路由 |
+| `notification.rs` | 通知 | Telegram Bot API |
 ```
 
 ## 常用命令
