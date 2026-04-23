@@ -45,7 +45,7 @@ curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/in
 ### 启动服务器
 
 ```bash
-./start.sh start
+./start-tui.sh
 ```
 
 ## 安装方式
@@ -89,7 +89,7 @@ MC_server/                      # 服务器根目录
 ├── fabric-server.jar           # 服务端核心
 ├── server.properties           # 服务器配置
 ├── mc-minder                   # MC-Minder 二进制
-├── start.sh                    # 启动脚本
+├── start-tui.sh                # TUI 启动脚本（图形化界面）
 ├── backup.sh                   # 备份脚本
 ├── config.toml                 # MC-Minder 配置文件
 ├── logs/
@@ -150,23 +150,24 @@ termux_notify = true
 ### 启动脚本命令
 
 ```bash
-./start.sh start      # 启动服务器和 MC-Minder
-./start.sh stop       # 停止所有服务
-./start.sh restart    # 重启服务
-./start.sh status     # 查看状态
-./start.sh attach     # 附加到服务器控制台
-./start.sh logs       # 查看服务器日志
-./start.sh minder-logs # 查看 MC-Minder 日志
-./start.sh init       # 初始化配置
-./start.sh update     # 更新 MC-Minder
+./start-tui.sh           # 启动 TUI 管理界面（推荐）
 ```
+
+**TUI 管理界面功能**：
+- 启动服务器（后台/前台模式）
+- 停止/重启服务器
+- 查看服务器状态和日志
+- 初始化配置
+- 更新 MC-Minder
+- Java 版本管理（切换/安装）
+- 语言切换（中文/English）
 
 ### MC-Minder 命令行
 
 ```bash
 ./mc-minder init          # 交互式初始化
 ./mc-minder gen-config    # 生成默认配置文件
-./mc-minder gen-start     # 生成 start.sh
+./mc-minder gen-start     # 生成 start-tui.sh
 ./mc-minder gen-backup    # 生成 backup.sh
 ./mc-minder self-update   # 更新到最新版本
 ./mc-minder config        # 显示当前配置

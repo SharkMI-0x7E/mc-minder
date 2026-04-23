@@ -7,7 +7,7 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.3.15 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.3.16 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能

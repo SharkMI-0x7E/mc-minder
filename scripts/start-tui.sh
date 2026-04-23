@@ -40,6 +40,245 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# ==================== 语言系统 ====================
+# 语言配置文件
+LANG_FILE="$HOME/.mc-minder/lang.conf"
+
+# 默认语言
+CURRENT_LANG="zh"
+
+# 加载语言设置
+load_lang() {
+    if [ -f "$LANG_FILE" ]; then
+        CURRENT_LANG=$(cat "$LANG_FILE" | tr -d '[:space:]')
+    fi
+}
+
+# 保存语言设置
+save_lang() {
+    mkdir -p "$(dirname "$LANG_FILE")"
+    echo "$CURRENT_LANG" > "$LANG_FILE"
+}
+
+# 语言切换函数
+# 用法: T "中文" "English"
+T() {
+    if [ "$CURRENT_LANG" = "en" ]; then
+        echo "$2"
+    else
+        echo "$1"
+    fi
+}
+
+# 切换语言
+switch_language() {
+    local choice
+    choice=$(dialog --clear \
+        --backtitle "MC-Minder" \
+        --title "$(T "语言设置" "Language Settings")" \
+        --menu "\n$(T "选择语言 / Select Language:" "Select Language:")" \
+        12 50 3 \
+        "zh" "$(T "中文" "Chinese")" \
+        "en" "$(T "英文" "English")" \
+        2>&1 >/dev/tty)
+    
+    case $? in
+        0)
+            CURRENT_LANG="$choice"
+            save_lang
+            dialog --msgbox "\n$(T "语言已切换，重新进入菜单后生效。" "Language changed. Changes take effect after re-entering the menu.")" 7 50
+            ;;
+    esac
+}
+
+# ==================== Java 版本管理 ====================
+# 检测已安装的 Java 版本
+detect_java_versions() {
+    JAVA_VERSIONS=()
+    JAVA_PATHS=()
+    
+    # 检查 java 命令
+    if command -v java >/dev/null 2>&1; then
+        local java_ver
+        java_ver=$(java -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+        local java_path
+        java_path=$(command -v java)
+        JAVA_VERSIONS+=("$java_ver")
+        JAVA_PATHS+=("$java_path")
+        debug_log "detect_java_versions: found java $java_ver at $java_path"
+    fi
+    
+    # 检查常见的 Java 安装路径
+    local java_dirs=(
+        "/usr/lib/jvm"
+        "/usr/java"
+        "/opt/java"
+        "/Library/Java/JavaVirtualMachines"  # macOS
+        "$PREFIX/lib/jvm"  # Termux
+    )
+    
+    for dir in "${java_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            for java_home in "$dir"/{java,openjdk,jdk}*; do
+                if [ -d "$java_home" ] && [ -x "$java_home/bin/java" ]; then
+                    local ver
+                    ver=$("$java_home/bin/java" -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+                    # 避免重复
+                    local exists=0
+                    for existing in "${JAVA_VERSIONS[@]}"; do
+                        if [ "$existing" = "$ver" ]; then
+                            exists=1
+                            break
+                        fi
+                    done
+                    if [ $exists -eq 0 ]; then
+                        JAVA_VERSIONS+=("$ver")
+                        JAVA_PATHS+=("$java_home/bin/java")
+                        debug_log "detect_java_versions: found java $ver at $java_home/bin/java"
+                    fi
+                fi
+            done
+        fi
+    done
+    
+    # Termux 特殊处理
+    if is_termux; then
+        # 检查 pkg 安装的 openjdk
+        for ver in 8 11 17 21; do
+            local jvm_path="$PREFIX/lib/jvm/openjdk-$ver/bin/java"
+            if [ -x "$jvm_path" ]; then
+                local java_ver
+                java_ver=$("$jvm_path" -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+                local exists=0
+                for existing in "${JAVA_VERSIONS[@]}"; do
+                    if [ "$existing" = "$java_ver" ]; then
+                        exists=1
+                        break
+                    fi
+                done
+                if [ $exists -eq 0 ]; then
+                    JAVA_VERSIONS+=("$java_ver")
+                    JAVA_PATHS+=("$jvm_path")
+                    debug_log "detect_java_versions: found termux openjdk-$ver"
+                fi
+            fi
+        done
+    fi
+    
+    # 如果没有找到任何版本，尝试通过 PATH 查找
+    if [ ${#JAVA_VERSIONS[@]} -eq 0 ]; then
+        # 检查常见的 java 路径
+        local path_dirs=$(echo "$PATH" | tr ':' '\n')
+        for dir in $path_dirs; do
+            if [ -x "$dir/java" ]; then
+                local ver
+                ver=$("$dir/java" -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+                JAVA_VERSIONS+=("$ver")
+                JAVA_PATHS+=("$dir/java")
+                debug_log "detect_java_versions: found java $ver in PATH at $dir/java"
+                break
+            fi
+        done
+    fi
+}
+
+# Java 版本切换
+switch_java_version() {
+    detect_java_versions
+    
+    if [ ${#JAVA_VERSIONS[@]} -eq 0 ]; then
+        dialog --title "$(T "错误" "Error")" \
+            --msgbox "\n$(T "未检测到已安装的 Java 版本。" "No Java versions detected.")\n\n$(T "请先安装 Java:" "Please install Java first:")\n  $(T "Termux: pkg install openjdk-17" "Termux: pkg install openjdk-17")\n  $(T "Ubuntu: sudo apt install openjdk-17-jdk" "Ubuntu: sudo apt install openjdk-17-jdk")" 10 60
+        return 1
+    fi
+    
+    # 构建菜单选项
+    local menu_items=()
+    local i=1
+    for idx in "${!JAVA_VERSIONS[@]}"; do
+        menu_items+=("$i" "Java ${JAVA_VERSIONS[$idx]}")
+        ((i++))
+    done
+    
+    local choice
+    choice=$(dialog --clear \
+        --backtitle "MC-Minder" \
+        --title "$(T "Java 版本管理" "Java Version Management")" \
+        --menu "\n$(T "选择要使用的 Java 版本:" "Select Java version to use:")\n\n$(T "已检测到 ${#JAVA_VERSIONS[@]} 个版本" "Detected ${#JAVA_VERSIONS[@]} version(s)")" \
+        15 60 ${#JAVA_VERSIONS[@]} \
+        "${menu_items[@]}" \
+        2>&1 >/dev/tty)
+    
+    case $? in
+        0)
+            local selected_idx=$((choice - 1))
+            local selected_java="${JAVA_PATHS[$selected_idx]}"
+            local selected_ver="${JAVA_VERSIONS[$selected_idx]}"
+            
+            # 如果选择的不是默认 java，创建符号链接或提示用户
+            if [ "$selected_java" != "$(command -v java 2>/dev/null)" ]; then
+                dialog --yesno "\n$(T "已选择 Java $selected_ver" "Selected Java $selected_ver")\n\n$(T "路径: $selected_java" "Path: $selected_java")\n\n$(T "是否将其设置为当前会话的默认 Java?" "Set as default Java for current session?")" 12 60
+                
+                case $? in
+                    0)
+                        # 更新 PATH 使选中的 java 优先
+                        local java_dir
+                        java_dir=$(dirname "$selected_java")
+                        export PATH="$java_dir:$PATH"
+                        debug_log "switch_java_version: added $java_dir to PATH"
+                        
+                        # 更新 JAVA_HOME
+                        export JAVA_HOME=$(dirname "$java_dir")
+                        debug_log "switch_java_version: set JAVA_HOME=$JAVA_HOME"
+                        
+                        dialog --msgbox "\n$(T "Java 版本已切换!" "Java version switched!")\n\n$(T "当前版本: $(java -version 2>&1 | head -1)" "Current version: $(java -version 2>&1 | head -1)")" 8 60
+                        ;;
+                esac
+            else
+                dialog --msgbox "\n$(T "当前已使用 Java $selected_ver" "Already using Java $selected_ver")" 6 40
+            fi
+            ;;
+    esac
+}
+
+# 安装 Java 版本
+install_java_version() {
+    if is_termux; then
+        local choice
+        choice=$(dialog --clear \
+            --backtitle "MC-Minder" \
+            --title "$(T "安装 Java" "Install Java")" \
+            --menu "\n$(T "选择要安装的 Java 版本:" "Select Java version to install:")" \
+            14 50 5 \
+            "8" "Java 8 $(T "(轻量级/旧服务器)" "(Lightweight/Old servers)")" \
+            "11" "Java 11 $(T "(稳定版)" "(Stable)")" \
+            "17" "Java 17 $(T "(推荐/最新MC)" "(Recommended/Latest MC)")" \
+            "21" "Java 21 $(T "(最新版)" "(Latest)")" \
+            "0" "$(T "返回" "Back")" \
+            2>&1 >/dev/tty)
+        
+        case $? in
+            0)
+                if [ "$choice" = "0" ]; then
+                    return
+                fi
+                
+                dialog --infobox "\n$(T "正在安装 Java $choice..." "Installing Java $choice...")" 5 40
+                debug_log "install_java_version: installing openjdk-$choice"
+                
+                if pkg install -y "openjdk-$choice" 2>&1; then
+                    dialog --msgbox "\n$(T "Java $choice 安装成功!" "Java $choice installed successfully!")" 6 40
+                else
+                    dialog --msgbox "\n$(T "Java $choice 安装失败!" "Java $choice installation failed!")" 6 40
+                fi
+                ;;
+        esac
+    else
+        dialog --title "$(T "安装 Java" "Install Java")" \
+            --msgbox "\n$(T "请根据您的系统手动安装 Java:" "Please install Java manually for your system:")\n\n$(T "Ubuntu/Debian:" "Ubuntu/Debian:")\n  sudo apt install openjdk-17-jdk\n\n$(T "CentOS/RHEL:" "CentOS/RHEL:")\n  sudo yum install java-17-openjdk\n\n$(T "macOS:" "macOS:")\n  brew install openjdk@17\n\n$(T "Arch Linux:" "Arch Linux:")\n  sudo pacman -S jdk17-openjdk" 16 60
+    fi
+}
+
 # ==================== 日志函数 ====================
 log_info() {
     echo -e "${GREEN}[信息]${NC} $1"
@@ -469,20 +708,20 @@ init_config() {
     load_ai_config
 
     exec 3>&1
-    VALUES=$(dialog --ok-label "保存配置" \
-        --cancel-label "取消" \
-        --form "\nMC-Minder 初始化配置\n\n请填写以下信息:" \
+    VALUES=$(dialog --ok-label "$(T "保存配置" "Save Config")" \
+        --cancel-label "$(T "取消" "Cancel")" \
+        --form "\n$(T "MC-Minder 初始化配置" "MC-Minder Initial Configuration")\n\n$(T "请填写以下信息:" "Please fill in the following information:")" \
         18 70 0 \
-        "服务器 JAR 文件:"     1 1 "${JAR}"       1 25 45 0 \
-        "最小内存:"             2 1 "${MIN_MEM}"   2 25 10 0 \
-        "最大内存:"             3 1 "${MAX_MEM}"   3 25 10 0 \
-        "Tmux 会话名称:"        4 1 "${SESSION}"   4 25 20 0 \
-        "RCON 端口:"            5 1 "${RCON_PORT}" 5 25 10 0 \
-        "RCON 密码:"            6 1 "${RCON_PASS}" 6 25 30 0 \
-        "AI 提供商:"            7 1 "openai"       7 25 15 0 \
-        "API 密钥:"             8 1 "${API_KEY}"   8 25 40 0 \
-        "API 模型:"             9 1 "${MODEL}"     9 25 25 0 \
-        "HTTP API 端口:"       10 1 "8080"        10 25 10 0 \
+        "$(T "服务器 JAR 文件:" "Server JAR file:")"     1 1 "${JAR}"       1 25 45 0 \
+        "$(T "最小内存:" "Min memory:")"                 2 1 "${MIN_MEM}"   2 25 10 0 \
+        "$(T "最大内存:" "Max memory:")"                 3 1 "${MAX_MEM}"   3 25 10 0 \
+        "$(T "Tmux 会话名称:" "Tmux session name:")"    4 1 "${SESSION}"   4 25 20 0 \
+        "$(T "RCON 端口:" "RCON port:")"                5 1 "${RCON_PORT}" 5 25 10 0 \
+        "$(T "RCON 密码:" "RCON password:")"            6 1 "${RCON_PASS}" 6 25 30 0 \
+        "$(T "AI 提供商:" "AI provider:")"              7 1 "openai"       7 25 15 0 \
+        "$(T "API 密钥:" "API key:")"                   8 1 "${API_KEY}"   8 25 40 0 \
+        "$(T "API 模型:" "API model:")"                 9 1 "${MODEL}"     9 25 25 0 \
+        "$(T "HTTP API 端口:" "HTTP API port:")"       10 1 "8080"        10 25 10 0 \
         2>&1 1>&3)
     exit_code=$?
     exec 3>&-
@@ -570,24 +809,29 @@ update_mcminder() {
 
 # ==================== 主菜单函数 ====================
 show_main_menu() {
+    # 加载语言设置
+    load_lang
+    
     while true; do
         exec 3>&1
         selection=$(dialog --clear \
-            --backtitle "MC-Minder - Minecraft 服务器管理套件" \
-            --title "主菜单" \
-            --menu "\n选择要执行的操作:" \
-            20 60 12 \
-            1 "启动服务器（后台模式，tmux）" \
-            2 "启动服务器（前台模式，调试用）" \
-            3 "停止服务器" \
-            4 "重启服务器" \
-            5 "查看服务器状态" \
-            6 "附加到服务器控制台（tmux）" \
-            7 "查看服务器日志" \
-            8 "查看 MC-Minder 日志" \
-            9 "初始化配置" \
-            10 "更新 MC-Minder" \
-            11 "退出" \
+            --backtitle "MC-Minder - $(T "Minecraft 服务器管理套件" "Minecraft Server Management Suite")" \
+            --title "$(T "主菜单" "Main Menu")" \
+            --menu "\n$(T "选择要执行的操作:" "Select an operation:")" \
+            22 60 14 \
+            1 "$(T "启动服务器（后台模式）" "Start Server (Background)")" \
+            2 "$(T "启动服务器（前台模式）" "Start Server (Foreground)")" \
+            3 "$(T "停止服务器" "Stop Server")" \
+            4 "$(T "重启服务器" "Restart Server")" \
+            5 "$(T "查看服务器状态" "View Server Status")" \
+            6 "$(T "附加到服务器控制台" "Attach to Server Console")" \
+            7 "$(T "查看服务器日志" "View Server Log")" \
+            8 "$(T "查看 MC-Minder 日志" "View MC-Minder Log")" \
+            9 "$(T "初始化配置" "Initialize Config")" \
+            10 "$(T "更新 MC-Minder" "Update MC-Minder")" \
+            11 "$(T "Java 版本管理" "Java Version Management")" \
+            12 "$(T "语言设置" "Language Settings")" \
+            13 "$(T "退出" "Exit")" \
             2>&1 1>&3)
         exit_code=$?
         exec 3>&-
@@ -613,17 +857,63 @@ show_main_menu() {
                     8) show_minder_logs ;;
                     9) init_config ;;
                     10) update_mcminder ;;
-                    11) clear
-                        log_info "感谢使用 MC-Minder!"
+                    11) show_java_menu ;;
+                    12) switch_language ;;
+                    13) clear
+                        log_info "$(T "感谢使用 MC-Minder!" "Thank you for using MC-Minder!")"
                         exit 0
                         ;;
                 esac
                 ;;
             1|255)
                 clear
-                log_info "感谢使用 MC-Minder!"
+                log_info "$(T "感谢使用 MC-Minder!" "Thank you for using MC-Minder!")"
                 exit 0
                 ;;
+        esac
+    done
+}
+
+# ==================== Java 管理子菜单 ====================
+show_java_menu() {
+    while true; do
+        local current_java_ver=""
+        if command -v java >/dev/null 2>&1; then
+            current_java_ver=$(java -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+        fi
+        
+        exec 3>&1
+        selection=$(dialog --clear \
+            --backtitle "MC-Minder - $(T "Java 版本管理" "Java Version Management")" \
+            --title "$(T "Java 管理" "Java Management")" \
+            --menu "\n$(T "当前 Java 版本:" "Current Java version:") ${current_java_ver:-$(T "未检测到" "Not detected")}\n\n$(T "选择操作:" "Select operation:")" \
+            14 60 5 \
+            1 "$(T "切换 Java 版本" "Switch Java Version")" \
+            2 "$(T "安装新 Java 版本" "Install New Java Version")" \
+            3 "$(T "查看所有已安装版本" "View All Installed Versions")" \
+            4 "$(T "返回主菜单" "Back to Main Menu")" \
+            2>&1 1>&3)
+        exit_code=$?
+        exec 3>&-
+
+        case $exit_code in
+            0)
+                case $selection in
+                    1) switch_java_version ;;
+                    2) install_java_version ;;
+                    3) 
+                        detect_java_versions
+                        local ver_list=""
+                        for idx in "${!JAVA_VERSIONS[@]}"; do
+                            ver_list+="Java ${JAVA_VERSIONS[$idx]} - ${JAVA_PATHS[$idx]}\n"
+                        done
+                        dialog --title "$(T "已安装的 Java 版本" "Installed Java Versions")" \
+                            --msgbox "\n${ver_list:-$(T "未检测到 Java 版本" "No Java versions detected")}" 15 60
+                        ;;
+                    4) return ;;
+                esac
+                ;;
+            1|255) return ;;
         esac
     done
 }
@@ -632,11 +922,14 @@ show_main_menu() {
 main() {
     debug_log "main: starting"
 
+    # 加载语言设置
+    load_lang
+
     # 清理可能残留的旧进程
     if [ -f "$RUST_PID_FILE" ]; then
         local old_pid=$(cat "$RUST_PID_FILE" 2>/dev/null)
         if kill -0 "$old_pid" 2>/dev/null; then
-            log_warn "检测到残留的 MC-Minder 进程 (PID: $old_pid)，正在终止..."
+            log_warn "$(T "检测到残留的 MC-Minder 进程 (PID: $old_pid)，正在终止..." "Detected residual MC-Minder process (PID: $old_pid), terminating...")"
             kill -TERM "$old_pid" 2>/dev/null
             sleep 1
         fi
@@ -654,19 +947,19 @@ main() {
     if ! check_dialog_installed; then
         echo ""
         echo "========================================="
-        echo "  MC-Minder TUI 启动器"
+        echo "  MC-Minder TUI $(T "启动器" "Launcher")"
         echo "========================================="
         echo ""
-        echo "未检测到 dialog 工具，正在尝试安装..."
+        echo "$(T "未检测到 dialog 工具，正在尝试安装..." "dialog tool not found, attempting to install...")"
         echo ""
         install_dialog
     fi
 
     export LANG=${LANG:-zh_CN.UTF-8}
 
-    dialog --backtitle "MC-Minder - Minecraft 服务器管理套件" \
-        --title "欢迎使用" \
-        --msgbox "\n欢迎使用 MC-Minder TUI 管理界面!\n\n这是一个基于 dialog 的图形化管理工具,\n可以方便地管理你的 Minecraft Fabric 服务器。\n\n按 Enter 进入主菜单..." 13 55
+    dialog --backtitle "MC-Minder - $(T "Minecraft 服务器管理套件" "Minecraft Server Management Suite")" \
+        --title "$(T "欢迎使用" "Welcome")" \
+        --msgbox "\n$(T "欢迎使用 MC-Minder TUI 管理界面!" "Welcome to MC-Minder TUI Management Interface!")\n\n$(T "这是一个基于 dialog 的图形化管理工具," "This is a dialog-based graphical management tool,")\n$(T "可以方便地管理你的 Minecraft Fabric 服务器。" "making it easy to manage your Minecraft Fabric server.")\n\n$(T "按 Enter 进入主菜单..." "Press Enter to enter the main menu...")" 13 55
 
     show_main_menu
 }

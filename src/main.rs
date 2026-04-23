@@ -53,7 +53,7 @@ enum Commands {
     #[command(about = "Generate default config file")]
     GenConfig,
     
-    #[command(about = "Generate start.sh script")]
+    #[command(about = "Generate start-tui.sh script")]
     GenStart,
     
     #[command(about = "Generate backup.sh script")]
@@ -226,7 +226,7 @@ async fn run_init() -> Result<()> {
     println!("     rcon.port=25575");
     println!("     rcon.password=<your_password>");
     println!("  2. Place fabric-server.jar in the current directory");
-    println!("  3. Run: ./start.sh start");
+    println!("  3. Run: ./start-tui.sh");
 
     Ok(())
 }
@@ -318,8 +318,8 @@ fn generate_config(path: &PathBuf) -> Result<()> {
 }
 
 fn generate_start_script() -> Result<()> {
-    let script = include_str!("../scripts/start.sh");
-    let script_path = PathBuf::from("start.sh");
+    let script = include_str!("../scripts/start-tui.sh");
+    let script_path = PathBuf::from("start-tui.sh");
     fs::write(&script_path, script)?;
     
     #[cfg(unix)]
@@ -328,7 +328,7 @@ fn generate_start_script() -> Result<()> {
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
     }
     
-    println!("{} Generated start.sh", "✓".green());
+    println!("{} Generated start-tui.sh", "✓".green());
     Ok(())
 }
 
