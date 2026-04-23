@@ -147,6 +147,7 @@ impl AiClient {
             max_tokens: self.config.max_tokens,
             temperature: self.config.temperature,
         };
+        debug!("[AI] OpenAI request prepared: model={}, max_tokens={}, temperature={}", self.config.model, self.config.max_tokens, self.config.temperature);
 
         debug!("Sending request to OpenAI API");
 
