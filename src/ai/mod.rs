@@ -219,6 +219,7 @@ impl AiClient {
         };
 
         debug!("Sending request to Ollama /api/chat: {}", chat_url);
+        debug!("[AI] Ollama request prepared: model={}, url={}", ollama.model, chat_url);
 
         let response = self.client
             .post(&chat_url)
