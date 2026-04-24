@@ -158,8 +158,9 @@ impl UpdateEngine {
         // Set executable permissions
         #[cfg(unix)]
         {
+            use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&exe_path, fs::Permissions::from_mode(0o755))
+            std::fs::set_permissions(&exe_path, Permissions::from_mode(0o755))
                 .map_err(|e| format!("Permission failed: {}", e))?;
         }
 
