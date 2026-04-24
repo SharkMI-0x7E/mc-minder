@@ -7,7 +7,7 @@
 
 English | [中文](./README.md)
 
-A smart management suite for Minecraft Fabric servers, supporting Linux and Termux/Android environments.
+A smart management suite for Minecraft Fabric servers, supporting macOS, Linux and Termux/Android environments.
 
 > This project was born from the need to manage Minecraft servers more conveniently on Termux.
 
@@ -169,7 +169,9 @@ MC-Minder now provides a native Rust TUI, no Shell scripts or dialog dependency 
 **TUI Features**:
 - **Main Menu** (13 items): Arrow keys/number keys navigation, Enter to select
 - **Server Control**: Start background/foreground, stop, restart, status view
+- **Real-time Console View**: Live server output via tmux capture-pane with auto/manual refresh
 - **Log Viewer**: Server log and MC-Minder log with scroll support
+- **Native Update Flow**: Async download and install with real-time progress, no need to exit TUI
 - **Java Management**: Version detection, switching, installation (Termux)
 - **Config Wizard**: Interactive configuration of 10 parameters
 - **Language Switching**: Chinese/English instant switch, persistent storage
@@ -180,6 +182,8 @@ MC-Minder now provides a native Rust TUI, no Shell scripts or dialog dependency 
 - 1-9: Quick select
 - Enter: Confirm
 - Esc/q: Back/Quit
+- r: Manual refresh (in console view)
+- a: Toggle auto-refresh (in console view)
 
 ### AI Chat Usage
 
@@ -190,6 +194,15 @@ Players trigger AI responses by prefixing messages with `!`:
 !help
 !how to make a diamond sword?
 ```
+
+**AI Backends**:
+- **OpenAI-compatible API**: Supports any OpenAI-format API (e.g., OpenAI, DeepSeek)
+- **Ollama Local Models**: Set `enabled = true` in config to use local AI models
+- Auto-routing: Uses Ollama when enabled, otherwise falls back to remote API
+
+**Chat Capture Modes**:
+- **Tmux Mode**: Captures server chat output via tmux capture-pane
+- **File Mode**: Parses server log file directly for chat messages
 
 **Rate Limiting**:
 - Minimum 2-second interval between requests from the same player
