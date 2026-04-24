@@ -35,6 +35,11 @@ pub struct App {
     // Config Wizard state
     pub wizard_fields: Vec<WizardField>,
     pub wizard_index: usize,
+    // Real-time console state
+    pub console_content: String,
+    pub console_scroll: usize,
+    pub console_auto_refresh: bool,
+    pub last_refresh: std::time::Instant,
 }
 
 pub enum AppState {
@@ -45,6 +50,7 @@ pub enum AppState {
     LanguageSelect,
     ConfirmDialog(ConfirmAction),
     StatusView,
+    Console,  // New: real-time console output
 }
 
 pub enum LogType {
@@ -92,6 +98,10 @@ impl App {
             message_timeout: None,
             wizard_fields: Vec::new(),
             wizard_index: 0,
+            console_content: String::new(),
+            console_scroll: 0,
+            console_auto_refresh: true,
+            last_refresh: std::time::Instant::now(),
         }
     }
 
@@ -104,6 +114,7 @@ impl App {
             AppState::LanguageSelect => self.on_key_language_select(key),
             AppState::ConfirmDialog(_) => self.on_key_confirm_dialog(key),
             AppState::StatusView => self.on_key_status_view(key),
+            AppState::Console => self.on_key_console(key),
         }
     }
 
@@ -437,6 +448,68 @@ impl App {
         }
     }
 
+    fn on_key_console(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.console_scroll > 0 { self.console_scroll -= 1; }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.console_scroll += 1;
+            }
+            KeyCode::PageUp => {
+                self.console_scroll = self.console_scroll.saturating_sub(10);
+            }
+            KeyCode::PageDown => {
+                self.console_scroll += 10;
+            }
+            KeyCode::Char('r') => {
+                // Manual refresh
+                self.capture_console_output();
+            }
+            KeyCode::Char('a') => {
+                // Toggle auto-refresh
+                self.console_auto_refresh = !self.console_auto_refresh;
+            }
+            _ => {}
+        }
+    }
+
+    fn capture_console_output(&mut self) {
+        let session = self.get_session_name();
+        // Use tmux capture to get console output
+        let output = std::process::Command::new("tmux")
+            .args(["capture-pane", "-p", "-t", &session])
+            .output();
+
+        if let Ok(out) = output {
+            let captured = String::from_utf8_lossy(&out.stdout).to_string();
+            // Add timestamp and color the output
+            let timestamp = chrono::Local::now().format("%H:%M:%S");
+            self.console_content = format!("[{}] Console output:\n{}", timestamp, captured);
+            self.last_refresh = std::time::Instant::now();
+        } else {
+            self.console_content = if matches!(self.language, Language::Chinese) {
+                "无法捕获控制台输出".to_string()
+            } else {
+                "Cannot capture console output".to_string()
+            };
+        }
+    }
+
+    fn enter_console(&mut self) {
+        self.console_scroll = 0;
+        self.console_auto_refresh = true;
+        self.console_content = if matches!(self.language, Language::Chinese) {
+            "正在捕获控制台输出...".to_string()
+        } else {
+            "Capturing console output...".to_string()
+        };
+        self.capture_console_output();
+        self.state = AppState::Console;
+    }
+
     fn execute_main_menu_action(&mut self, index: usize) {
         match index {
             0 => self.start_server_background(),
@@ -448,7 +521,7 @@ impl App {
                 self.state = AppState::ConfirmDialog(ConfirmAction::RestartServer);
             }
             4 => self.show_server_status(),
-            5 => self.attach_server_console(),
+            5 => self.enter_console(),  // Changed from attach_server_console
             6 => {
                 self.load_server_log();
                 self.state = AppState::LogViewer(LogType::Server);
@@ -1229,6 +1302,51 @@ impl App {
             .split(f.area())[1]);
     }
 
+    fn draw_console(&mut self, f: &mut Frame) {
+        // Auto-refresh if enabled and 1 second has passed
+        if self.console_auto_refresh && self.last_refresh.elapsed() > std::time::Duration::from_secs(1) {
+            self.capture_console_output();
+        }
+
+        let title = match self.language {
+            Language::Chinese => "实时控制台",
+            Language::English => "Real-time Console",
+        };
+
+        let lines: Vec<&str> = self.console_content.lines().collect();
+        let total_lines = lines.len();
+        let start = self.console_scroll.min(total_lines.saturating_sub(1));
+        let visible: String = lines.iter().skip(start).take(30)
+            .map(|s| *s)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let auto_str = if self.console_auto_refresh { "ON" } else { "OFF" };
+        let para = Paragraph::new(visible)
+            .block(Block::default()
+                .title(format!("{} ({}: {}) | {}/{}",
+                    title,
+                    if matches!(self.language, Language::Chinese) { "自动刷新" } else { "Auto" },
+                    auto_str,
+                    start + 1,
+                    total_lines.max(1)))
+                .borders(Borders::ALL));
+
+        f.render_widget(para, f.area());
+
+        // Help
+        let help = match self.language {
+            Language::Chinese => "上/下键: 滚动 | r: 刷新 | a: 自动刷新开关 | Esc: 返回",
+            Language::English => "Up/Down: Scroll | r: Refresh | a: Auto-toggle | Esc: Back",
+        };
+        let help_block = Paragraph::new(help)
+            .style(Style::default().fg(Color::DarkGray));
+        f.render_widget(help_block, Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(f.area())[1]);
+    }
+
     fn status_text(&self) -> String {
         let lang = match self.language {
             Language::Chinese => "中文",
@@ -1246,7 +1364,7 @@ impl App {
         )
     }
 
-    pub fn draw(&self, f: &mut Frame) {
+    pub fn draw(&mut self, f: &mut Frame) {
         // Check for message timeout
         if let Some(timeout) = &self.message_timeout {
             if timeout.elapsed() > std::time::Duration::from_secs(3) {
@@ -1262,6 +1380,7 @@ impl App {
             AppState::LanguageSelect => self.draw_language_select(f),
             AppState::ConfirmDialog(action) => self.draw_confirm_dialog(f, action),
             AppState::StatusView => self.draw_status_view(f),
+            AppState::Console => self.draw_console(f),
         }
 
         // Draw message overlay if present
