@@ -3,13 +3,11 @@
 
 use anyhow::Result;
 use serde_json;
-use std::env;
 use tokio::sync::mpsc;
 
 /// Messages sent from update engine to UI
 #[derive(Debug, Clone)]
 pub enum UpdateMsg {
-    Checking,
     UpdateAvailable { current: String, latest: String, download_url: String },
     UpToDate,
     DownloadProgress { downloaded: u64, total: Option<u64> },
@@ -38,6 +36,7 @@ pub fn build_download_url(version: &str, target: &str) -> String {
 }
 
 /// Compare version strings, return true if latest > current
+#[allow(dead_code)]
 pub fn is_newer_version(current: &str, latest: &str) -> bool {
     fn parse_ver(v: &str) -> Vec<u32> {
         v.split('.').filter_map(|s| s.parse().ok()).collect()

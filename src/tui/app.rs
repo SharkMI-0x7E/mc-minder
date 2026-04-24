@@ -44,6 +44,7 @@ pub struct App {
     // Foreground mode request
     pub foreground_requested: bool,
     // Update engine state
+    #[allow(dead_code)]
     pub update_engine: UpdateEngine,
     pub update_rx: Option<tokio::sync::mpsc::Receiver<UpdateMsg>>,
     pub update_state: Option<UpdateState>,
@@ -63,7 +64,6 @@ pub enum AppState {
 
 // Update state machine
 pub enum UpdateState {
-    Checking,
     UpdateAvailable { current: String, latest: String, download_url: String },
     UpToDate,
     Downloading { downloaded: u64, total: Option<u64> },
@@ -93,6 +93,7 @@ pub enum MessageType {
     Info,
     Success,
     Warning,
+    #[allow(dead_code)]
     Error,
 }
 
@@ -427,11 +428,6 @@ impl App {
         };
 
         let content = match &self.update_state {
-            Some(UpdateState::Checking) => {
-                Paragraph::new(
-                    if matches!(self.language, Language::Chinese) { "检查更新中..." } else { "Checking for updates..." }
-                )
-            }
             Some(UpdateState::UpdateAvailable { current, latest, .. }) => {
                 let current_str = current.clone();
                 let latest_str = latest.clone();
@@ -866,19 +862,7 @@ impl App {
             .join(".mc-minder/tmp/mc-minder-watchdog.pid");
         self.watchdog_running = watchdog_file.exists();
 
-        self.state = AppState::StatusView;
-    }
-
-    fn attach_server_console(&mut self) {
-        let session = self.get_session_name();
-        self.message = Some((
-            if matches!(self.language, Language::Chinese) {
-                format!("请在终端中运行: tmux attach -t {}", session)
-            } else {
-                format!("Run in terminal: tmux attach -t {}", session)
-            },
-            MessageType::Info,
-        ));
+self.state = AppState::StatusView;
     }
 
     fn load_server_log(&mut self) {
@@ -918,8 +902,7 @@ impl App {
     }
 
     fn update_mcminder(&mut self) {
-        // Set state to checking and spawn async task
-        self.update_state = Some(UpdateState::Checking);
+        // Spawn async check task
         self.state = AppState::UpdateView;
 
         let (tx, rx) = tokio::sync::mpsc::channel(32);
@@ -1000,9 +983,6 @@ impl App {
         if let Some(rx) = &mut self.update_rx {
             while let Ok(msg) = rx.try_recv() {
                 match msg {
-                    UpdateMsg::Checking => {
-                        self.update_state = Some(UpdateState::Checking);
-                    }
                     UpdateMsg::UpdateAvailable { current, latest, download_url } => {
                         self.update_state = Some(UpdateState::UpdateAvailable {
                             current,
