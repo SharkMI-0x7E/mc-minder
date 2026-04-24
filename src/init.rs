@@ -180,48 +180,19 @@ pub fn generate_config(path: &PathBuf) -> Result<()> {
 }
 
 pub fn generate_start_script() -> Result<()> {
-    // Write start-tui.sh
+    // Write start-tui.sh - now a simple launcher for mc-minder tui
     let script = include_str!("../scripts/start-tui.sh");
     let script_path = PathBuf::from("start-tui.sh");
     fs::write(&script_path, script)?;
-
-    // Create lib directory
-    let lib_dir = PathBuf::from("lib");
-    fs::create_dir_all(&lib_dir)?;
-
-    // Write all lib/*.sh files
-    let common_sh = include_str!("../scripts/common.sh");
-    fs::write("lib/common.sh", common_sh)?;
-
-    let config_sh = include_str!("../scripts/config.sh");
-    fs::write("lib/config.sh", config_sh)?;
-
-    let java_sh = include_str!("../scripts/java.sh");
-    fs::write("lib/java.sh", java_sh)?;
-
-    let server_sh = include_str!("../scripts/server.sh");
-    fs::write("lib/server.sh", server_sh)?;
-
-    let log_sh = include_str!("../scripts/log.sh");
-    fs::write("lib/log.sh", log_sh)?;
-
-    let menu_sh = include_str!("../scripts/menu.sh");
-    fs::write("lib/menu.sh", menu_sh)?;
 
     // Set permissions (unix only)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
-        fs::set_permissions("lib/common.sh", fs::Permissions::from_mode(0o644))?;
-        fs::set_permissions("lib/config.sh", fs::Permissions::from_mode(0o644))?;
-        fs::set_permissions("lib/java.sh", fs::Permissions::from_mode(0o644))?;
-        fs::set_permissions("lib/server.sh", fs::Permissions::from_mode(0o644))?;
-        fs::set_permissions("lib/log.sh", fs::Permissions::from_mode(0o644))?;
-        fs::set_permissions("lib/menu.sh", fs::Permissions::from_mode(0o644))?;
     }
 
-    println!("{} Generated start-tui.sh and lib/*.sh", "✓".green());
+    println!("{} Generated start-tui.sh", "✓".green());
     Ok(())
 }
 
