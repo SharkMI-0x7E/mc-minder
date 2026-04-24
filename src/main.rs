@@ -14,6 +14,7 @@ mod ai;
 mod rcon;
 mod context;
 mod api;
+mod tui;
 
 use anyhow::Result;
 use clap::Parser;

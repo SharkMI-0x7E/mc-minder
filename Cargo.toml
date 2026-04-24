@@ -1,6 +1,6 @@
 [package]
 name = "mc-minder"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A smart management suite for Minecraft Fabric servers on Linux/Termux/Android"
@@ -31,6 +31,9 @@ warp = "0.3"
 notify = "8.2"
 colored = "2.1"
 dialoguer = "0.11"
+ratatui = "0.28"
+crossterm = "0.28"
+dirs = "5"
 
 [profile.release]
 opt-level = 3

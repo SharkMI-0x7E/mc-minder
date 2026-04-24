@@ -48,6 +48,9 @@ pub enum Commands {
         #[arg(required = true)]
         key: String,
     },
+
+    #[command(about = "Start TUI management interface")]
+    Tui,
 }
 
 use anyhow::Result;
@@ -61,5 +64,6 @@ pub async fn handle_command(cmd: Commands, args: &Args) -> Result<()> {
         Commands::SelfUpdate => super::self_update::run_self_update().await,
         Commands::Config => super::init::show_config(&args.config),
         Commands::ConfigGet { key } => super::init::get_config_value(&args.config, &key),
+        Commands::Tui => super::tui::run(&args.config).await,
     }
 }
