@@ -8,20 +8,33 @@ set -euo pipefail
 # ==================== Find mc-minder binary ====================
 find_mcminder() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local found_not_executable=""
 
-    # Check common locations
+    # Check common locations (including platform-specific binary names from releases)
     local candidates=(
         "${MC_MINDER_BIN:-}"
         "$script_dir/mc-minder"
+        "$script_dir/mc-minder-termux-aarch64"
+        "$script_dir/mc-minder-x86_64-linux"
         "$script_dir/../mc-minder"
+        "$script_dir/../mc-minder-termux-aarch64"
+        "$script_dir/../mc-minder-x86_64-linux"
         "$(dirname "$script_dir")/mc-minder"
+        "$(dirname "$script_dir")/mc-minder-termux-aarch64"
+        "$(dirname "$script_dir")/mc-minder-x86_64-linux"
         "./mc-minder"
+        "./mc-minder-termux-aarch64"
+        "./mc-minder-x86_64-linux"
     )
 
     for bin in "${candidates[@]}"; do
-        if [ -n "$bin" ] && [ -x "$bin" ]; then
-            echo "$bin"
-            return 0
+        if [ -n "$bin" ] && [ -f "$bin" ]; then
+            if [ -x "$bin" ]; then
+                echo "$bin"
+                return 0
+            else
+                found_not_executable="$bin"
+            fi
         fi
     done
 
@@ -31,11 +44,14 @@ find_mcminder() {
         return 0
     fi
 
-    echo ""
-    return 1
-}
+    if [ -n "$found_not_executable" ]; then
+        echo "Error: mc-minder found at $found_not_executable but is not executable"
+        echo ""
+        echo "Run this command to fix:"
+        echo "  chmod +x \"$found_not_executable\""
+        exit 1
+    fi
 
-BIN=$(find_mcminder) || {
     echo "Error: mc-minder binary not found"
     echo ""
     echo "Solutions:"
@@ -44,6 +60,8 @@ BIN=$(find_mcminder) || {
     echo "  3. Add mc-minder to your PATH"
     exit 1
 }
+
+BIN=$(find_mcminder)
 
 # Launch TUI
 exec "$BIN" tui "$@"
