@@ -134,19 +134,19 @@ jobs:
           # 解析每个 commit
           while IFS= read -r line; do
             # 提取类型和消息
-            if [[ "$line" =~ ^feat\(|^feat:\ ]]; then
+            if [[ "$line" =~ ^feat\( ]] || [[ "$line" =~ ^feat: ]]; then
               FEAT="${FEAT}\n- ${line#*:}"
-            elif [[ "$line" =~ ^fix\(|^fix:\ ]]; then
+            elif [[ "$line" =~ ^fix\( ]] || [[ "$line" =~ ^fix: ]]; then
               FIX="${FIX}\n- ${line#*:}"
-            elif [[ "$line" =~ ^docs\(|^docs:\ ]]; then
+            elif [[ "$line" =~ ^docs\( ]] || [[ "$line" =~ ^docs: ]]; then
               DOCS="${DOCS}\n- ${line#*:}"
-            elif [[ "$line" =~ ^refactor\(|^refactor:\ ]]; then
+            elif [[ "$line" =~ ^refactor\( ]] || [[ "$line" =~ ^refactor: ]]; then
               REFACTOR="${REFACTOR}\n- ${line#*:}"
-            elif [[ "$line" =~ ^perf\(|^perf:\ ]]; then
+            elif [[ "$line" =~ ^perf\( ]] || [[ "$line" =~ ^perf: ]]; then
               PERF="${PERF}\n- ${line#*:}"
-            elif [[ "$line" =~ ^test\(|^test:\ ]]; then
+            elif [[ "$line" =~ ^test\( ]] || [[ "$line" =~ ^test: ]]; then
               TEST="${TEST}\n- ${line#*:}"
-            elif [[ "$line" =~ ^chore\(|^chore:\ ]]; then
+            elif [[ "$line" =~ ^chore\( ]] || [[ "$line" =~ ^chore: ]]; then
               CHORE="${CHORE}\n- ${line#*:}"
             elif [[ -n "$line" ]]; then
               OTHER="${OTHER}\n- ${line}"
