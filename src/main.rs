@@ -15,6 +15,7 @@ mod rcon;
 mod context;
 mod api;
 mod tui;
+mod update_engine;
 
 use anyhow::Result;
 use clap::Parser;

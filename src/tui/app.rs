@@ -8,6 +8,7 @@ use ratatui::text::Span;
 use ratatui::Frame;
 
 use crate::config::Config;
+use crate::update_engine::{UpdateEngine, UpdateMsg};
 
 // Small helper struct for configuration wizard fields
 #[derive(Clone)]
@@ -42,6 +43,10 @@ pub struct App {
     pub last_refresh: std::time::Instant,
     // Foreground mode request
     pub foreground_requested: bool,
+    // Update engine state
+    pub update_engine: UpdateEngine,
+    pub update_rx: Option<tokio::sync::mpsc::Receiver<UpdateMsg>>,
+    pub update_state: Option<UpdateState>,
 }
 
 pub enum AppState {
@@ -52,7 +57,19 @@ pub enum AppState {
     LanguageSelect,
     ConfirmDialog(ConfirmAction),
     StatusView,
-    Console,  // New: real-time console output
+    Console,  // Real-time console output
+    UpdateView,  // Update progress view
+}
+
+// Update state machine
+pub enum UpdateState {
+    Checking,
+    UpdateAvailable { current: String, latest: String, download_url: String },
+    UpToDate,
+    Downloading { downloaded: u64, total: Option<u64> },
+    Installing,
+    Done { new_version: String },
+    Failed(String),
 }
 
 pub enum LogType {
@@ -105,6 +122,9 @@ impl App {
             console_auto_refresh: true,
             last_refresh: std::time::Instant::now(),
             foreground_requested: false,
+            update_engine: UpdateEngine::new(),
+            update_rx: None,
+            update_state: None,
         }
     }
 
@@ -118,6 +138,7 @@ impl App {
             AppState::ConfirmDialog(_) => self.on_key_confirm_dialog(key),
             AppState::StatusView => self.on_key_status_view(key),
             AppState::Console => self.on_key_console(key),
+            AppState::UpdateView => self.on_key_update_view(key),
         }
     }
 
@@ -397,6 +418,120 @@ impl App {
             session_name: "mc_server".to_string(),
             log_file: "logs/latest.log".to_string(),
         }
+    }
+
+    fn draw_update_view(&mut self, f: &mut Frame) {
+        let title = match self.language {
+            Language::Chinese => "更新 MC-Minder",
+            Language::English => "Update MC-Minder",
+        };
+
+        let content = match &self.update_state {
+            Some(UpdateState::Checking) => {
+                Paragraph::new(
+                    if matches!(self.language, Language::Chinese) { "检查更新中..." } else { "Checking for updates..." }
+                )
+            }
+            Some(UpdateState::UpdateAvailable { current, latest, .. }) => {
+                let current_str = current.clone();
+                let latest_str = latest.clone();
+                Paragraph::new(format!(
+                    "{}\n\n{}\n{}\n\n{}",
+                    if matches!(self.language, Language::Chinese) { "发现新版本!" } else { "New version available!" },
+                    if matches!(self.language, Language::Chinese) { format!("当前版本: {}", current_str) } else { format!("Current: {}", current_str) },
+                    if matches!(self.language, Language::Chinese) { format!("最新版本: {}", latest_str) } else { format!("Latest: {}", latest_str) },
+                    if matches!(self.language, Language::Chinese) { "按 Y 更新, N 取消, Esc 返回" } else { "Press Y to update, N to cancel, Esc to go back" }
+                ))
+            }
+            Some(UpdateState::UpToDate) => {
+                Paragraph::new(
+                    if matches!(self.language, Language::Chinese) {
+                        "已是最新版本!\n\n按任意键返回..."
+                    } else {
+                        "You are up to date!\n\nPress any key to go back..."
+                    }
+                )
+            }
+            Some(UpdateState::Downloading { downloaded, total }) => {
+                let progress = if let Some(t) = total {
+                    if *t > 0 { (*downloaded as f64 / *t as f64).min(1.0) } else { 0.0 }
+                } else { 0.0 };
+
+                let downloaded_str = crate::update_engine::format_bytes(*downloaded);
+                let total_str = total.map(|t| crate::update_engine::format_bytes(t)).unwrap_or_else(|| "?".to_string());
+
+                Paragraph::new(format!(
+                    "{}\n\n{:.0}% 已下载\n\n{}: {} / {}\n\n{}",
+                    if matches!(self.language, Language::Chinese) { "正在下载..." } else { "Downloading..." },
+                    progress * 100.0,
+                    if matches!(self.language, Language::Chinese) { "进度" } else { "Progress" },
+                    downloaded_str,
+                    total_str,
+                    if matches!(self.language, Language::Chinese) { "按 Esc 取消" } else { "Press Esc to cancel" }
+                ))
+            }
+            Some(UpdateState::Installing) => {
+                Paragraph::new(
+                    if matches!(self.language, Language::Chinese) {
+                        "正在安装更新...\n请稍候..."
+                    } else {
+                        "Installing update...\nPlease wait..."
+                    }
+                )
+            }
+            Some(UpdateState::Done { new_version }) => {
+                Paragraph::new(format!(
+                    "{} v{}!\n\n{}\n\n{}",
+                    if matches!(self.language, Language::Chinese) { "更新完成" } else { "Update complete" },
+                    new_version,
+                    if matches!(self.language, Language::Chinese) {
+                        "请手动重启 MC-Minder 以使用新版本"
+                    } else {
+                        "Please restart MC-Minder to use the new version"
+                    },
+                    if matches!(self.language, Language::Chinese) {
+                        "按任意键退出..."
+                    } else {
+                        "Press any key to exit..."
+                    }
+                ))
+            }
+            Some(UpdateState::Failed(err)) => {
+                Paragraph::new(format!(
+                    "{}\n\n{}\n\n{}",
+                    if matches!(self.language, Language::Chinese) { "更新失败" } else { "Update failed" },
+                    err,
+                    if matches!(self.language, Language::Chinese) {
+                        "按任意键返回..."
+                    } else {
+                        "Press any key to go back..."
+                    }
+                ))
+            }
+            None => {
+                Paragraph::new(
+                    if matches!(self.language, Language::Chinese) { "初始化中..." } else { "Initializing..." }
+                )
+            }
+        };
+
+        let para = content
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .alignment(ratatui::layout::Alignment::Center);
+
+        f.render_widget(para, f.area());
+
+        // Help
+        let help = match self.language {
+            Language::Chinese => "Y: 确认 | N: 取消 | Esc: 返回",
+            Language::English => "Y: Confirm | N: Cancel | Esc: Back",
+        };
+        let help_block = Paragraph::new(help)
+            .style(Style::default().fg(Color::DarkGray));
+        f.render_widget(help_block, Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(f.area())[1]);
     }
 
     fn on_key_language_select(&mut self, key: crossterm::event::KeyEvent) {
@@ -783,32 +918,114 @@ impl App {
     }
 
     fn update_mcminder(&mut self) {
-        let bin = self.find_mcminder_bin();
-        let output = std::process::Command::new(&bin)
-            .arg("self-update")
-            .output();
+        // Set state to checking and spawn async task
+        self.update_state = Some(UpdateState::Checking);
+        self.state = AppState::UpdateView;
 
-        match output {
-            Ok(out) => {
-                let msg = String::from_utf8_lossy(&out.stdout).to_string();
-                self.message = Some((
-                    if matches!(self.language, Language::Chinese) {
-                        format!("更新完成: {}", msg)
-                    } else {
-                        format!("Update complete: {}", msg)
-                    },
-                    MessageType::Success,
-                ));
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        self.update_rx = Some(rx);
+
+        let current_version = env!("CARGO_PKG_VERSION").to_string();
+        let engine = UpdateEngine::new();
+
+        // Spawn async check task
+        tokio::spawn(async move {
+            let result = engine.check_update(&current_version).await;
+            let _ = tx.send(result).await;
+        });
+    }
+
+    fn on_key_update_view(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+
+        // Process any pending messages first
+        self.process_update_messages();
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                // Cancel and go back to main menu
+                self.update_rx = None;
+                self.update_state = None;
+                self.state = AppState::MainMenu;
             }
-            Err(e) => {
-                self.message = Some((
-                    if matches!(self.language, Language::Chinese) {
-                        format!("更新失败: {}", e)
-                    } else {
-                        format!("Update failed: {}", e)
-                    },
-                    MessageType::Error,
-                ));
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                // If UpdateAvailable, start download
+                if let Some(UpdateState::UpdateAvailable { download_url, latest, .. }) = &self.update_state {
+                    self.start_download(download_url.clone(), latest.clone());
+                } else if let Some(UpdateState::UpToDate) = &self.update_state {
+                    // User acknowledged up to date, go back
+                    self.update_rx = None;
+                    self.update_state = None;
+                    self.state = AppState::MainMenu;
+                } else if let Some(UpdateState::Done { .. }) = &self.update_state {
+                    // User acknowledged done, quit (binary updated)
+                    self.should_quit = true;
+                } else if let Some(UpdateState::Failed(_)) = &self.update_state {
+                    // User acknowledged failure, go back
+                    self.update_rx = None;
+                    self.update_state = None;
+                    self.state = AppState::MainMenu;
+                }
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                // Cancel update if in UpdateAvailable state
+                if let Some(UpdateState::UpdateAvailable { .. }) = &self.update_state {
+                    self.update_rx = None;
+                    self.update_state = None;
+                    self.state = AppState::MainMenu;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn start_download(&mut self, download_url: String, latest_version: String) {
+        self.update_state = Some(UpdateState::Downloading { downloaded: 0, total: None });
+
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        self.update_rx = Some(rx);
+
+        let engine = UpdateEngine::new();
+        tokio::spawn(async move {
+            let result = engine.download_and_install(&download_url, &latest_version, tx).await;
+            if let Err(e) = result {
+                // Send failed message
+                let (tx2, _) = tokio::sync::mpsc::channel(32);
+                let _ = tx2.send(UpdateMsg::Failed(e)).await;
+            }
+        });
+    }
+
+    pub(crate) fn process_update_messages(&mut self) {
+        if let Some(rx) = &mut self.update_rx {
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    UpdateMsg::Checking => {
+                        self.update_state = Some(UpdateState::Checking);
+                    }
+                    UpdateMsg::UpdateAvailable { current, latest, download_url } => {
+                        self.update_state = Some(UpdateState::UpdateAvailable {
+                            current,
+                            latest,
+                            download_url,
+                        });
+                    }
+                    UpdateMsg::UpToDate => {
+                        self.update_state = Some(UpdateState::UpToDate);
+                    }
+                    UpdateMsg::DownloadProgress { downloaded, total } => {
+                        self.update_state = Some(UpdateState::Downloading { downloaded, total });
+                    }
+                    UpdateMsg::Installing => {
+                        self.update_state = Some(UpdateState::Installing);
+                    }
+                    UpdateMsg::Done { new_version } => {
+                        self.update_state = Some(UpdateState::Done { new_version });
+                    }
+                    UpdateMsg::Failed(err) => {
+                        self.update_state = Some(UpdateState::Failed(err));
+                    }
+                }
             }
         }
     }
@@ -1389,6 +1606,7 @@ impl App {
             AppState::ConfirmDialog(action) => self.draw_confirm_dialog(f, action),
             AppState::StatusView => self.draw_status_view(f),
             AppState::Console => self.draw_console(f),
+            AppState::UpdateView => self.draw_update_view(f),
         }
 
         // Draw message overlay if present

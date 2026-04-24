@@ -1,6 +1,6 @@
 [package]
 name = "mc-minder"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A smart management suite for Minecraft Fabric servers on Linux/Termux/Android"
@@ -21,8 +21,9 @@ env_logger = "0.10"
 clap = { version = "4.4", features = ["derive"] }
 anyhow = "1.0"
 thiserror = "1.0"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
 serde_json = "1.0"
+futures-util = "0.3"
 regex = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 parking_lot = "0.12"

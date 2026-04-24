@@ -22,6 +22,9 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
 
     // Main loop
     loop {
+        // Process async update messages first
+        app.process_update_messages();
+
         terminal.draw(|f| {
             app.draw(f);
         })?;
