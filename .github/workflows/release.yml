@@ -131,34 +131,36 @@ jobs:
           CHORE=""
           OTHER=""
           
-          # 解析每个 commit（格式：hash 空格 message）
-          while IFS=' ' read -r hash msg; do
-            [ -z "$hash" ] && continue
+          # 解析每个 commit
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
             
-            # 获取短 hash
-            short_hash="${hash:0:7}"
-            # 构建 commit 链接
-            commit_link="([${short_hash}](https://github.com/${{ github.repository }}/commit/${hash}))"
-            
-            # 提取类型和消息
-            if [[ "$msg" =~ ^feat\( ]] || [[ "$msg" =~ ^feat: ]]; then
-              FEAT="${FEAT}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^fix\( ]] || [[ "$msg" =~ ^fix: ]]; then
-              FIX="${FIX}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^docs\( ]] || [[ "$msg" =~ ^docs: ]]; then
-              DOCS="${DOCS}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^refactor\( ]] || [[ "$msg" =~ ^refactor: ]]; then
-              REFACTOR="${REFACTOR}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^perf\( ]] || [[ "$msg" =~ ^perf: ]]; then
-              PERF="${PERF}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^test\( ]] || [[ "$msg" =~ ^test: ]]; then
-              TEST="${TEST}\n- ${msg#*:} ${commit_link}"
-            elif [[ "$msg" =~ ^chore\( ]] || [[ "$msg" =~ ^chore: ]]; then
-              CHORE="${CHORE}\n- ${msg#*:} ${commit_link}"
-            elif [[ -n "$msg" ]]; then
-              OTHER="${OTHER}\n- ${msg} ${commit_link}"
+            # 提取类型和消息（格式：type(scope): message 或 type: message）
+            if echo "$line" | grep -qE '^feat(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^feat[^:]*: //')
+              FEAT="${FEAT}\n- ${msg}"
+            elif echo "$line" | grep -qE '^fix(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^fix[^:]*: //')
+              FIX="${FIX}\n- ${msg}"
+            elif echo "$line" | grep -qE '^docs(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^docs[^:]*: //')
+              DOCS="${DOCS}\n- ${msg}"
+            elif echo "$line" | grep -qE '^refactor(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^refactor[^:]*: //')
+              REFACTOR="${REFACTOR}\n- ${msg}"
+            elif echo "$line" | grep -qE '^perf(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^perf[^:]*: //')
+              PERF="${PERF}\n- ${msg}"
+            elif echo "$line" | grep -qE '^test(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^test[^:]*: //')
+              TEST="${TEST}\n- ${msg}"
+            elif echo "$line" | grep -qE '^chore(\(|:)'; then
+              msg=$(echo "$line" | sed 's/^chore[^:]*: //')
+              CHORE="${CHORE}\n- ${msg}"
+            else
+              OTHER="${OTHER}\n- ${line}"
             fi
-          done <<< "$(git log $RANGE --pretty=format:'%H %s' --no-merges)"
+          done <<< "$(git log $RANGE --pretty=format:'%s' --no-merges)"
           
           # 构建最终 changelog
           CHANGELOG=""
@@ -200,7 +202,7 @@ jobs:
             CHANGELOG="### 初始发布"
           fi
           
-          # 将 changelog 写入输出（转义特殊字符）
+          # 将 changelog 写入输出
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
