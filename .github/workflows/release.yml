@@ -131,36 +131,44 @@ jobs:
           CHORE=""
           OTHER=""
           
-          # 解析每个 commit
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
+          # 解析每个 commit（格式：hash|message）
+          while IFS='|' read -r hash msg; do
+            [ -z "$hash" ] && continue
             
-            # 提取类型和消息（格式：type(scope): message 或 type: message）
-            if echo "$line" | grep -qE '^feat(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^feat[^:]*: //')
-              FEAT="${FEAT}\n- ${msg}"
-            elif echo "$line" | grep -qE '^fix(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^fix[^:]*: //')
-              FIX="${FIX}\n- ${msg}"
-            elif echo "$line" | grep -qE '^docs(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^docs[^:]*: //')
-              DOCS="${DOCS}\n- ${msg}"
-            elif echo "$line" | grep -qE '^refactor(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^refactor[^:]*: //')
-              REFACTOR="${REFACTOR}\n- ${msg}"
-            elif echo "$line" | grep -qE '^perf(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^perf[^:]*: //')
-              PERF="${PERF}\n- ${msg}"
-            elif echo "$line" | grep -qE '^test(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^test[^:]*: //')
-              TEST="${TEST}\n- ${msg}"
-            elif echo "$line" | grep -qE '^chore(\(|:)'; then
-              msg=$(echo "$line" | sed 's/^chore[^:]*: //')
-              CHORE="${CHORE}\n- ${msg}"
+            # 获取短 hash
+            short_hash="${hash:0:7}"
+            # 构建 commit 链接
+            commit_link="([${short_hash}](https://github.com/${{ github.repository }}/commit/${hash}))"
+            
+            # 提取类型和消息
+            if echo "$msg" | grep -qE '^feat(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^feat[^:]*: //')
+              FEAT="${FEAT}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^fix(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^fix[^:]*: //')
+              FIX="${FIX}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^docs(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^docs[^:]*: //')
+              DOCS="${DOCS}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^refactor(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^refactor[^:]*: //')
+              REFACTOR="${REFACTOR}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^perf(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^perf[^:]*: //')
+              PERF="${PERF}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^test(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^test[^:]*: //')
+              TEST="${TEST}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^chore(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^chore[^:]*: //')
+              CHORE="${CHORE}\n- ${clean_msg} ${commit_link}"
+            elif echo "$msg" | grep -qE '^ci(\(|:)'; then
+              clean_msg=$(echo "$msg" | sed 's/^ci[^:]*: //')
+              CHORE="${CHORE}\n- ${clean_msg} ${commit_link}"
             else
-              OTHER="${OTHER}\n- ${line}"
+              OTHER="${OTHER}\n- ${msg} ${commit_link}"
             fi
-          done <<< "$(git log $RANGE --pretty=format:'%s' --no-merges)"
+          done <<< "$(git log $RANGE --pretty=format:'%H|%s' --no-merges)"
           
           # 构建最终 changelog
           CHANGELOG=""
