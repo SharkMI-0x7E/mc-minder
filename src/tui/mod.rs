@@ -51,8 +51,40 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
         }
     }
 
-    // Restore terminal
+    // Restore terminal before starting foreground server
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+
+    // If foreground server was requested, start it now
+    if app.foreground_requested {
+        let jar = app.get_jar();
+        let min_mem = app.get_min_mem();
+        let max_mem = app.get_max_mem();
+
+        println!();
+        println!("Starting Minecraft server in foreground...");
+        println!("Command: java -Xms{} -Xmx{} -jar {} nogui", min_mem, max_mem, jar);
+        println!("Press Ctrl+C to stop the server");
+        println!();
+
+        // Use exec to replace current process with java
+        let status = std::process::Command::new("java")
+            .args(["-Xms".to_owned() + &min_mem, "-Xmx".to_owned() + &max_mem, "-jar".to_owned(), jar, "nogui".to_owned()])
+            .status();
+
+        match status {
+            Ok(exit_code) => {
+                if exit_code.success() {
+                    println!("\nServer stopped normally.");
+                } else {
+                    println!("\nServer exited with code: {:?}", exit_code.code());
+                }
+            }
+            Err(e) => {
+                println!("\nFailed to start server: {}", e);
+            }
+        }
+    }
+
     Ok(())
 }

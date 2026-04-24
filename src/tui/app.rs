@@ -40,6 +40,8 @@ pub struct App {
     pub console_scroll: usize,
     pub console_auto_refresh: bool,
     pub last_refresh: std::time::Instant,
+    // Foreground mode request
+    pub foreground_requested: bool,
 }
 
 pub enum AppState {
@@ -102,6 +104,7 @@ impl App {
             console_scroll: 0,
             console_auto_refresh: true,
             last_refresh: std::time::Instant::now(),
+            foreground_requested: false,
         }
     }
 
@@ -657,18 +660,23 @@ impl App {
     }
 
     fn start_server_foreground(&mut self) {
-        let _jar = self.get_jar();
-        let _min_mem = self.get_min_mem();
-        let _max_mem = self.get_max_mem();
+        let jar = self.get_jar();
+        let min_mem = self.get_min_mem();
+        let max_mem = self.get_max_mem();
+        let session = self.get_session_name();
 
         self.message = Some((
             if matches!(self.language, Language::Chinese) {
-                "前台模式需要直接运行: java -Xms{} -Xmx{} -jar {} nogui".to_string()
+                format!("正在启动前台服务器...\n\n命令: java -Xms{} -Xmx{} -jar {} nogui\n\n会话: {}\n\n按 Ctrl+C 停止服务器", min_mem, max_mem, jar, session)
             } else {
-                "Foreground mode requires running directly: java -Xms{} -Xmx{} -jar {} nogui".to_string()
+                format!("Starting foreground server...\n\nCommand: java -Xms{} -Xmx{} -jar {} nogui\n\nSession: {}\n\nPress Ctrl+C to stop server", min_mem, max_mem, jar, session)
             },
             MessageType::Info,
         ));
+
+        // Mark that we want to exit TUI and start foreground server
+        self.foreground_requested = true;
+        self.should_quit = true;
     }
 
     fn stop_server(&mut self) {
@@ -908,19 +916,19 @@ impl App {
             .unwrap_or_else(|| "mc_server".to_string())
     }
 
-    fn get_jar(&self) -> String {
+    pub(crate) fn get_jar(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.jar.clone())
             .unwrap_or_else(|| "fabric-server.jar".to_string())
     }
 
-    fn get_min_mem(&self) -> String {
+    pub(crate) fn get_min_mem(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.min_mem.clone())
             .unwrap_or_else(|| "512M".to_string())
     }
 
-    fn get_max_mem(&self) -> String {
+    pub(crate) fn get_max_mem(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.max_mem.clone())
             .unwrap_or_else(|| "1G".to_string())
