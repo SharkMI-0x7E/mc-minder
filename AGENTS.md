@@ -295,6 +295,86 @@ git tag v{version}
 git push origin v{version}
 ```
 
+## Release 内容规范（重要！）
+
+为了确保用户能快速了解每次更新的内容，**Release 页面必须遵循以下格式**：
+
+### 自动生成规则
+
+CI/CD 会根据 commit message 自动生成 Release 内容，**commit message 必须遵循以下格式**：
+
+```
+<type>(<scope>): <subject>
+
+<body (可选)>
+```
+
+### 分类和 Emoji
+
+Release 页面会自动按以下分类显示更新内容：
+
+| type | Emoji | 说明 | 示例 |
+|------|-------|------|------|
+| `feat` | 🚀 | 新功能 | `feat(scripts): add smart path detection` |
+| `fix` | 🐛 | 问题修复 | `fix(rcon): resolve connection timeout` |
+| `perf` | ⚡ | 性能优化 | `perf(monitor): reduce file I/O operations` |
+| `refactor` | ♻️ | 代码重构 | `refactor(config): simplify loading logic` |
+| `docs` | 📝 | 文档更新 | `docs(readme): update installation guide` |
+| `test` | ✅ | 测试相关 | `test(rcon): add unit tests` |
+| `chore` | 🔧 | 其他改动 | `chore: update dependencies` |
+
+### 最终 Release 页面示例
+
+```markdown
+## MC-Minder v0.4.1
+
+### 🚀 新功能
+- Add intelligent path detection in start-tui.sh
+- Enhance binary detection in common.sh
+
+### 🐛 问题修复
+- Fix path resolution issues in different deployment scenarios
+
+### ⚡ 性能优化
+- Improve script loading with cached path detection
+
+### 📝 文档更新
+- Add comprehensive deployment guide
+- Document 4 deployment methods
+
+### 🔧 其他改动
+- Update dependencies to latest versions
+
+---
+
+### 下载
+| 平台 | 文件 | 说明 |
+|------|------|------|
+| Linux x64 | `mc-minder-x86_64-linux` | 适用于桌面 Linux / WSL |
+| Termux/Android ARM64 | `mc-minder-termux-aarch64` | 适用于手机 Termux 环境 |
+
+### 安装
+```bash
+curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install.sh | bash
+```
+```
+
+### 为什么需要这个规范？
+
+1. **用户体验**：用户打开 Release 页面就能立即看到更新了什么
+2. **清晰分类**：按功能、修复、性能等分类，一目了然
+3. **自动归档**：每次发布都自动生成结构化的更新日志
+4. **专业形象**：让项目看起来更专业、更易维护
+
+### Commit 提交检查清单
+
+提交前请确认：
+- [ ] commit message 符合 Conventional Commits 格式
+- [ ] type 正确反映了变更性质（feat/fix/docs/refactor/perf/test/chore）
+- [ ] scope 准确标识了影响范围
+- [ ] subject 简洁明了地描述了变更内容
+- [ ] 不要写太长的 commit message，保持在 50 字符以内
+
 ## 更新日志
 - 2026-04-21: **v0.3.14 发布!** 修复编译错误、clippy 警告、代码质量优化
 - 2026-04-21: **v0.3.13 发布!** 修复 AI 聊天无响应问题、改进日志解析、增强 debug 日志

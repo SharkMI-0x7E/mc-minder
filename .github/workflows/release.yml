@@ -115,28 +115,87 @@ jobs:
           
           if [ -n "$PREVIOUS_TAG" ]; then
             echo "Generating changelog from ${PREVIOUS_TAG} to ${{ steps.get_version.outputs.VERSION }}"
-            
-            # 生成 changelog
-            CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ steps.get_version.outputs.VERSION }} \
-              --pretty=format:"- %s (%h)" \
-              --no-merges)
+            RANGE="${PREVIOUS_TAG}..${{ steps.get_version.outputs.VERSION }}"
           else
             echo "No previous tag found, generating full changelog"
-            
-            # 第一个 release，显示所有 commit
-            CHANGELOG=$(git log \
-              --pretty=format:"- %s (%h)" \
-              --no-merges)
+            RANGE=""
           fi
           
-          # 如果没有 commit，使用默认消息
+          # 按类型分类的 changelog
+          FEAT=""
+          FIX=""
+          DOCS=""
+          REFACTOR=""
+          PERF=""
+          TEST=""
+          CHORE=""
+          OTHER=""
+          
+          # 解析每个 commit
+          while IFS= read -r line; do
+            # 提取类型和消息
+            if [[ "$line" =~ ^feat\(|^feat:\ ]]; then
+              FEAT="${FEAT}\n- ${line#*:}"
+            elif [[ "$line" =~ ^fix\(|^fix:\ ]]; then
+              FIX="${FIX}\n- ${line#*:}"
+            elif [[ "$line" =~ ^docs\(|^docs:\ ]]; then
+              DOCS="${DOCS}\n- ${line#*:}"
+            elif [[ "$line" =~ ^refactor\(|^refactor:\ ]]; then
+              REFACTOR="${REFACTOR}\n- ${line#*:}"
+            elif [[ "$line" =~ ^perf\(|^perf:\ ]]; then
+              PERF="${PERF}\n- ${line#*:}"
+            elif [[ "$line" =~ ^test\(|^test:\ ]]; then
+              TEST="${TEST}\n- ${line#*:}"
+            elif [[ "$line" =~ ^chore\(|^chore:\ ]]; then
+              CHORE="${CHORE}\n- ${line#*:}"
+            elif [[ -n "$line" ]]; then
+              OTHER="${OTHER}\n- ${line}"
+            fi
+          done <<< "$(git log $RANGE --pretty=format:'%s' --no-merges)"
+          
+          # 构建最终 changelog
+          CHANGELOG=""
+          
+          if [ -n "$FEAT" ]; then
+            CHANGELOG="${CHANGELOG}\n### 🚀 新功能\n${FEAT}\n"
+          fi
+          
+          if [ -n "$FIX" ]; then
+            CHANGELOG="${CHANGELOG}\n### 🐛 问题修复\n${FIX}\n"
+          fi
+          
+          if [ -n "$PERF" ]; then
+            CHANGELOG="${CHANGELOG}\n### ⚡ 性能优化\n${PERF}\n"
+          fi
+          
+          if [ -n "$REFACTOR" ]; then
+            CHANGELOG="${CHANGELOG}\n### ♻️ 代码重构\n${REFACTOR}\n"
+          fi
+          
+          if [ -n "$DOCS" ]; then
+            CHANGELOG="${CHANGELOG}\n### 📝 文档更新\n${DOCS}\n"
+          fi
+          
+          if [ -n "$TEST" ]; then
+            CHANGELOG="${CHANGELOG}\n### ✅ 测试\n${TEST}\n"
+          fi
+          
+          if [ -n "$CHORE" ]; then
+            CHANGELOG="${CHANGELOG}\n### 🔧 其他改动\n${CHORE}\n"
+          fi
+          
+          if [ -n "$OTHER" ]; then
+            CHANGELOG="${CHANGELOG}\n### 📦 其他提交\n${OTHER}\n"
+          fi
+          
+          # 如果没有内容，使用默认消息
           if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- Initial release"
+            CHANGELOG="### 📦 初始发布"
           fi
           
           # 将 changelog 写入输出（转义特殊字符）
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
