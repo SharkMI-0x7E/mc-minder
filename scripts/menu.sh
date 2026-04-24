@@ -2,11 +2,8 @@
 # Sourced by start-tui.sh
 # Contains: main menu, Java menu, language switching
 
-source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/config.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/java.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/server.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
+# 注意：脚本已由 start-tui.sh 按正确顺序加载
+# 无需在此重复 source
 
 # ==================== 语言切换 ====================
 switch_language() {

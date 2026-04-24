@@ -1,15 +1,86 @@
 #!/bin/bash
 # MC-Minder TUI 启动脚本（精简入口）
 # 现在只负责加载 lib/*.sh 并启动主菜单
-# 所有逻辑已拆分到 scripts/lib/*.sh
+# 所有逻辑已拆分到 scripts/*.sh
 
 set -euo pipefail
 
-# ==================== 路径配置 ====================
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="$SCRIPT_DIR/lib"
+# ==================== 智能路径检测 ====================
+# 支持多种部署方式：
+#   1. start-tui.sh 和 scripts/ 在同一目录
+#   2. start-tui.sh 在 scripts/ 目录内部
+#   3. 通过环境变量 MC_MINDER_SCRIPTS 指定
+#   4. 脚本在 PATH 中（通过符号链接）
 
-# 按依赖顺序加载模块
+find_script_dir() {
+    local script_name="${BASH_SOURCE[0]}"
+    
+    # 如果是符号链接，解析真实路径
+    if [ -L "$script_name" ]; then
+        script_name="$(readlink -f "$script_name")"
+    fi
+    
+    local script_dir="$(cd "$(dirname "$script_name")" && pwd)"
+    
+    # 情况 1: 脚本在 scripts/ 目录内部
+    if [ -f "$script_dir/common.sh" ]; then
+        echo "$script_dir"
+        return
+    fi
+    
+    # 情况 2: scripts/ 目录在脚本所在目录的上级或同级
+    if [ -f "$script_dir/scripts/common.sh" ]; then
+        echo "$script_dir/scripts"
+        return
+    fi
+    
+    # 情况 3: 从环境变量读取
+    if [ -n "${MC_MINDER_SCRIPTS:-}" ] && [ -f "$MC_MINDER_SCRIPTS/common.sh" ]; then
+        echo "$MC_MINDER_SCRIPTS"
+        return
+    fi
+    
+    # 情况 4: 检查常见的安装路径
+    local common_paths=(
+        "$HOME/.mc-minder/scripts"
+        "/usr/local/share/mc-minder/scripts"
+        "/opt/mc-minder/scripts"
+        "$HOME/mc-minder/scripts"
+    )
+    
+    for path in "${common_paths[@]}"; do
+        if [ -f "$path/common.sh" ]; then
+            echo "$path"
+            return
+        fi
+    done
+    
+    # 错误：找不到脚本目录
+    echo ""
+    echo "ERROR: Cannot find MC-Minder script directory"
+    echo ""
+    echo "Solutions:"
+    echo "  1. Ensure scripts/*.sh files are in the same directory as start-tui.sh"
+    echo "  2. Set environment variable: export MC_MINDER_SCRIPTS=/path/to/scripts"
+    echo "  3. Run from the directory containing start-tui.sh"
+    echo ""
+    exit 1
+}
+
+# 设置脚本目录
+SCRIPTS_DIR="$(find_script_dir)"
+if [ -z "$SCRIPTS_DIR" ]; then
+    exit 1
+fi
+
+# 设置 LIB_DIR 为脚本目录（向后兼容）
+LIB_DIR="$SCRIPTS_DIR"
+
+# 导出变量供其他脚本使用
+export MC_MINDER_SCRIPTS="$SCRIPTS_DIR"
+export MC_MINDER_BIN="${MC_MINDER_BIN:-./mc-minder}"
+
+# ==================== 加载脚本模块 ====================
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/config.sh"
 source "$LIB_DIR/java.sh"
@@ -20,6 +91,8 @@ source "$LIB_DIR/menu.sh"
 # ==================== 主程序入口 ====================
 main() {
     debug_log "main: starting"
+    debug_log "SCRIPTS_DIR=$SCRIPTS_DIR"
+    debug_log "MC_MINDER_BIN=$MC_MINDER_BIN"
 
     # 加载语言设置
     load_lang

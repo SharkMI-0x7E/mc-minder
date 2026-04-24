@@ -198,6 +198,28 @@ download_scripts() {
     else
         log_info "start-tui.sh already exists, skipping"
     fi
+    
+    # 下载必要的脚本库文件
+    log_info "Downloading script libraries..."
+    local scripts_dir="scripts"
+    mkdir -p "$scripts_dir"
+    
+    local required_scripts=("common.sh" "config.sh" "java.sh" "server.sh" "log.sh" "menu.sh")
+    
+    for script in "${required_scripts[@]}"; do
+        if [ ! -f "$scripts_dir/$script" ]; then
+            log_info "Downloading $script..."
+            if download_with_retry "$base_url/$script" "$scripts_dir/$script" "$script library"; then
+                chmod +x "$scripts_dir/$script"
+            else
+                log_warn "Failed to download $script"
+            fi
+        else
+            log_info "$script already exists, skipping"
+        fi
+    done
+    
+    log_info "Script libraries downloaded"
 }
 
 show_post_install_instructions() {

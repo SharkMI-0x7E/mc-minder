@@ -14,7 +14,60 @@ debug_log() {
 # ==================== Global constants ====================
 CONFIG_FILE="config.toml"
 LOG_FILE="logs/latest.log"
-RUST_BIN="./mc-minder"
+
+# 智能检测 mc-minder 二进制文件位置
+# 优先级：
+# 1. 环境变量 MC_MINDER_BIN
+# 2. 当前目录下的 mc-minder
+# 3. 脚本所在目录的上级目录的 mc-minder
+# 4. PATH 中的 mc-minder
+find_mcminder_bin() {
+    # 1. 环境变量
+    if [ -n "${MC_MINDER_BIN:-}" ] && [ -f "$MC_MINDER_BIN" ]; then
+        echo "$MC_MINDER_BIN"
+        return
+    fi
+    
+    # 2. 当前目录
+    if [ -f "./mc-minder" ]; then
+        echo "./mc-minder"
+        return
+    fi
+    
+    # 3. 脚本目录的上级目录（脚本在 scripts/ 子目录）
+    if [ -n "${MC_MINDER_SCRIPTS:-}" ]; then
+        local parent_dir="$(dirname "$MC_MINDER_SCRIPTS")"
+        if [ -f "$parent_dir/mc-minder" ]; then
+            echo "$parent_dir/mc-minder"
+            return
+        fi
+    fi
+    
+    # 4. PATH 中查找
+    if command -v mc-minder >/dev/null 2>&1; then
+        echo "mc-minder"
+        return
+    fi
+    
+    # 5. 常见安装路径
+    local common_paths=(
+        "$HOME/.mc-minder/mc-minder"
+        "/usr/local/bin/mc-minder"
+        "/opt/mc-minder/mc-minder"
+    )
+    
+    for path in "${common_paths[@]}"; do
+        if [ -f "$path" ]; then
+            echo "$path"
+            return
+        fi
+    done
+    
+    # 默认返回 ./mc-minder（启动时会报错）
+    echo "./mc-minder"
+}
+
+RUST_BIN="$(find_mcminder_bin)"
 
 # PID file paths (use user home to avoid /tmp permission issues)
 PID_DIR="$HOME/.mc-minder/tmp"
@@ -25,6 +78,7 @@ WATCHDOG_PID_FILE="$PID_DIR/mc-minder-watchdog.pid"
 SESSION_NAME="mc_server"
 
 debug_log "CONFIG_FILE=$CONFIG_FILE"
+debug_log "RUST_BIN=$RUST_BIN"
 debug_log "PID_DIR=$PID_DIR"
 debug_log "RUST_PID_FILE=$RUST_PID_FILE"
 

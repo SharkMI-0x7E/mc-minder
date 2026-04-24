@@ -7,7 +7,7 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.4.0 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.4.1 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能
@@ -216,6 +216,66 @@ mc-minder/
 | `api.rs` | API | warp HTTP 服务器、端点路由 |
 | `notification.rs` | 通知 | Telegram Bot API |
 ```
+
+### 脚本部署方式
+
+脚本支持多种部署方式：
+
+**方式 1：自动部署（推荐）**
+```bash
+# 通过安装脚本自动部署
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+
+# 安装后目录结构
+mc-server/
+├── mc-minder
+├── start-tui.sh
+├── scripts/
+│   ├── common.sh
+│   ├── config.sh
+│   ├── java.sh
+│   ├── server.sh
+│   ├── log.sh
+│   └── menu.sh
+└── ...
+```
+
+**方式 2：手动部署**
+```bash
+# 将脚本放在服务器根目录
+mc-server/
+├── mc-minder
+├── start-tui.sh          # 从 scripts/ 复制出来
+├── scripts/              # 所有脚本库文件
+│   ├── common.sh
+│   └── ...
+└── ...
+```
+
+**方式 3：符号链接**
+```bash
+# 创建符号链接到 PATH
+ln -s /path/to/start-tui.sh /usr/local/bin/start-tui
+
+# 设置脚本目录环境变量
+export MC_MINDER_SCRIPTS=/path/to/scripts
+```
+
+**方式 4：环境变量配置**
+```bash
+# 设置 mc-minder 二进制位置
+export MC_MINDER_BIN=/usr/local/bin/mc-minder
+
+# 设置脚本目录
+export MC_MINDER_SCRIPTS=/path/to/scripts
+```
+
+脚本会自动检测以下路径：
+1. 当前目录下的 `scripts/`
+2. 脚本所在目录
+3. `~/.mc-minder/scripts/`
+4. `/usr/local/share/mc-minder/scripts/`
+5. `/opt/mc-minder/scripts/`
 
 ## 常用命令
 
