@@ -7,7 +7,7 @@ use warp::Filter;
 use serde::{Serialize, Deserialize};
 
 use crate::context::ContextManager;
-use crate::rcon::RconClient;
+use crate::command_sender::MultiCommandSender;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
@@ -30,7 +30,7 @@ pub struct CommandResponse {
 pub struct HttpApi {
     port: u16,
     context: Arc<ContextManager>,
-    rcon: Arc<RwLock<Option<RconClient>>>,
+    sender: Arc<RwLock<MultiCommandSender>>,
     start_time: std::time::Instant,
 }
 
@@ -38,12 +38,12 @@ impl HttpApi {
     pub fn new(
         port: u16,
         context: Arc<ContextManager>,
-        rcon: Arc<RwLock<Option<RconClient>>>,
+        sender: Arc<RwLock<MultiCommandSender>>,
     ) -> Self {
         Self {
             port,
             context,
-            rcon,
+            sender,
             start_time: std::time::Instant::now(),
         }
     }
@@ -75,37 +75,29 @@ impl HttpApi {
                 warp::reply::json(&messages)
             });
 
-        let rcon_clone = self.rcon.clone();
+        let sender = self.sender.clone();
         let command_route = warp::path("command")
             .and(warp::post())
             .and(warp::body::json())
             .and_then(move |req: CommandRequest| {
-                let rcon = rcon_clone.clone();
+                let sender = sender.clone();
                 async move {
-                    let mut rcon_guard = rcon.write().await;
-                    if let Some(ref mut rcon_client) = *rcon_guard {
-                        match rcon_client.execute(&req.command).await {
-                            Ok(result) => {
-                                let response = CommandResponse {
-                                    success: true,
-                                    result,
-                                };
-                                Ok::<_, warp::Rejection>(warp::reply::json(&response))
-                            }
-                            Err(e) => {
-                                let response = CommandResponse {
-                                    success: false,
-                                    result: e.to_string(),
-                                };
-                                Ok(warp::reply::json(&response))
-                            }
+                    let mut sender_guard = sender.write().await;
+                    match sender_guard.send_command(&req.command).await {
+                        Ok(_) => {
+                            let response = CommandResponse {
+                                success: true,
+                                result: "Command sent successfully".to_string(),
+                            };
+                            Ok::<_, warp::Rejection>(warp::reply::json(&response))
                         }
-                    } else {
-                        let response = CommandResponse {
-                            success: false,
-                            result: "RCON not connected. Please check server.properties for RCON settings.".to_string(),
-                        };
-                        Ok(warp::reply::json(&response))
+                        Err(e) => {
+                            let response = CommandResponse {
+                                success: false,
+                                result: e.to_string(),
+                            };
+                            Ok(warp::reply::json(&response))
+                        }
                     }
                 }
             });

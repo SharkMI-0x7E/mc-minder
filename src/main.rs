@@ -1,6 +1,3 @@
-// MC-Minder - Smart Management Suite for Minecraft Fabric Servers
-// Entry point - thin dispatcher after refactoring
-
 mod cli;
 mod init;
 mod self_update;
@@ -16,6 +13,7 @@ mod context;
 mod api;
 mod tui;
 mod update_engine;
+mod command_sender;
 
 use anyhow::Result;
 use clap::Parser;
@@ -33,5 +31,5 @@ async fn main() -> Result<()> {
     init_logger(args.verbose)?;
     print_banner();
 
-    server_run::run_server(args).await
+    server_run::run_server_bg(args).await
 }
