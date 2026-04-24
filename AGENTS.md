@@ -170,23 +170,19 @@ mc-minder/
 │   ├── self_update.rs       # 自动更新功能
 │   ├── server_run.rs        # 服务器运行主循环
 │   │
+│   ├── tui/                 # TUI 模块（替代 Shell 脚本）
+│   │   ├── mod.rs           # TUI 入口 + 终端管理
+│   │   └── app.rs           # 应用状态 + UI 渲染 + 事件处理
+│   │
 │   ├── monitor.rs           # 日志监控模块
 │   ├── ai.rs                # AI 聊天机器人
 │   ├── rcon.rs              # RCON 通信协议
 │   ├── context.rs           # 对话上下文管理
 │   ├── api.rs               # HTTP API 服务器
 │   └── notification.rs      # 通知服务（Telegram 等）
-├── scripts/                 # Shell 脚本库
-│   ├── start-tui.sh         # TUI 启动脚本
-│   ├── backup.sh            # 备份脚本
-│   ├── install_oh_my_opencode.sh  # oh-my-opencode 安装脚本
-│   └── lib/                 # 脚本库
-│       ├── common.sh        # 通用函数
-│       ├── config.sh        # 配置读取
-│       ├── java.sh          # Java 版本管理
-│       ├── server.sh        # 服务器控制
-│       ├── log.sh           # 日志查看
-│       └── menu.sh          # TUI 菜单
+├── scripts/                 # Shell 脚本
+│   ├── start-tui.sh         # TUI 启动脚本（极简启动器）
+│   └── backup.sh            # 备份脚本
 ├── .github/
 │   └── workflows/
 │       └── release.yml      # CI/CD 发布工作流
@@ -209,6 +205,7 @@ mc-minder/
 | `init.rs` | 初始化 | 交互式配置生成、脚本生成 |
 | `self_update.rs` | 更新 | GitHub Release 检查、二进制替换 |
 | `server_run.rs` | 运行 | 事件循环、组件协调 |
+| `tui/` | TUI | 原生终端 UI（替代 Shell 脚本） |
 | `monitor.rs` | 监控 | notify 文件监控、日志解析 |
 | `ai.rs` | AI | OpenAI/Ollama 客户端、限流 |
 | `rcon.rs` | RCON | 异步 RCON 协议、自动重连 |
@@ -228,54 +225,38 @@ curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/in
 
 # 安装后目录结构
 mc-server/
-├── mc-minder
-├── start-tui.sh
-├── scripts/
-│   ├── common.sh
-│   ├── config.sh
-│   ├── java.sh
-│   ├── server.sh
-│   ├── log.sh
-│   └── menu.sh
+├── mc-minder              # Rust 二进制（包含 TUI）
+├── start-tui.sh           # TUI 启动脚本（极简启动器）
+├── backup.sh              # 备份脚本
 └── ...
 ```
 
 **方式 2：手动部署**
 ```bash
-# 将脚本放在服务器根目录
+# 只需要 mc-minder 二进制
 mc-server/
-├── mc-minder
-├── start-tui.sh          # 从 scripts/ 复制出来
-├── scripts/              # 所有脚本库文件
-│   ├── common.sh
-│   └── ...
+├── mc-minder              # Rust 二进制
+├── start-tui.sh           # 可选：TUI 启动脚本
 └── ...
 ```
 
-**方式 3：符号链接**
+**方式 3：直接运行**
 ```bash
-# 创建符号链接到 PATH
-ln -s /path/to/start-tui.sh /usr/local/bin/start-tui
-
-# 设置脚本目录环境变量
-export MC_MINDER_SCRIPTS=/path/to/scripts
+# 无需脚本，直接运行
+./mc-minder tui
 ```
 
 **方式 4：环境变量配置**
 ```bash
 # 设置 mc-minder 二进制位置
 export MC_MINDER_BIN=/usr/local/bin/mc-minder
-
-# 设置脚本目录
-export MC_MINDER_SCRIPTS=/path/to/scripts
 ```
 
-脚本会自动检测以下路径：
-1. 当前目录下的 `scripts/`
+TUI 启动脚本会自动检测 mc-minder 二进制位置：
+1. MC_MINDER_BIN 环境变量
 2. 脚本所在目录
-3. `~/.mc-minder/scripts/`
-4. `/usr/local/share/mc-minder/scripts/`
-5. `/opt/mc-minder/scripts/`
+3. 当前目录
+4. PATH 中查找
 
 ## 常用命令
 
