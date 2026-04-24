@@ -309,40 +309,40 @@ CI/CD 会根据 commit message 自动生成 Release 内容，**commit message �
 <body (可选)>
 ```
 
-### 分类和 Emoji
+### 分类和类型
 
 Release 页面会自动按以下分类显示更新内容：
 
-| type | Emoji | 说明 | 示例 |
-|------|-------|------|------|
-| `feat` | 🚀 | 新功能 | `feat(scripts): add smart path detection` |
-| `fix` | 🐛 | 问题修复 | `fix(rcon): resolve connection timeout` |
-| `perf` | ⚡ | 性能优化 | `perf(monitor): reduce file I/O operations` |
-| `refactor` | ♻️ | 代码重构 | `refactor(config): simplify loading logic` |
-| `docs` | 📝 | 文档更新 | `docs(readme): update installation guide` |
-| `test` | ✅ | 测试相关 | `test(rcon): add unit tests` |
-| `chore` | 🔧 | 其他改动 | `chore: update dependencies` |
+| type | 说明 | 示例 |
+|------|------|------|
+| `feat` | 新功能 | `feat(scripts): add smart path detection` |
+| `fix` | 问题修复 | `fix(rcon): resolve connection timeout` |
+| `perf` | 性能优化 | `perf(monitor): reduce file I/O operations` |
+| `refactor` | 代码重构 | `refactor(config): simplify loading logic` |
+| `docs` | 文档更新 | `docs(readme): update installation guide` |
+| `test` | 测试相关 | `test(rcon): add unit tests` |
+| `chore` | 其他改动 | `chore: update dependencies` |
 
 ### 最终 Release 页面示例
 
 ```markdown
 ## MC-Minder v0.4.1
 
-### 🚀 新功能
+### 新功能
 - Add intelligent path detection in start-tui.sh
 - Enhance binary detection in common.sh
 
-### 🐛 问题修复
+### 问题修复
 - Fix path resolution issues in different deployment scenarios
 
-### ⚡ 性能优化
+### 性能优化
 - Improve script loading with cached path detection
 
-### 📝 文档更新
+### 文档更新
 - Add comprehensive deployment guide
 - Document 4 deployment methods
 
-### 🔧 其他改动
+### 其他改动
 - Update dependencies to latest versions
 
 ---

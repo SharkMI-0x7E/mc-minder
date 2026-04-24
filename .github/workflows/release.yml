@@ -157,40 +157,40 @@ jobs:
           CHANGELOG=""
           
           if [ -n "$FEAT" ]; then
-            CHANGELOG="${CHANGELOG}\n### 🚀 新功能\n${FEAT}\n"
+            CHANGELOG="${CHANGELOG}\n### 新功能\n${FEAT}\n"
           fi
           
           if [ -n "$FIX" ]; then
-            CHANGELOG="${CHANGELOG}\n### 🐛 问题修复\n${FIX}\n"
+            CHANGELOG="${CHANGELOG}\n### 问题修复\n${FIX}\n"
           fi
           
           if [ -n "$PERF" ]; then
-            CHANGELOG="${CHANGELOG}\n### ⚡ 性能优化\n${PERF}\n"
+            CHANGELOG="${CHANGELOG}\n### 性能优化\n${PERF}\n"
           fi
           
           if [ -n "$REFACTOR" ]; then
-            CHANGELOG="${CHANGELOG}\n### ♻️ 代码重构\n${REFACTOR}\n"
+            CHANGELOG="${CHANGELOG}\n### 代码重构\n${REFACTOR}\n"
           fi
           
           if [ -n "$DOCS" ]; then
-            CHANGELOG="${CHANGELOG}\n### 📝 文档更新\n${DOCS}\n"
+            CHANGELOG="${CHANGELOG}\n### 文档更新\n${DOCS}\n"
           fi
           
           if [ -n "$TEST" ]; then
-            CHANGELOG="${CHANGELOG}\n### ✅ 测试\n${TEST}\n"
+            CHANGELOG="${CHANGELOG}\n### 测试\n${TEST}\n"
           fi
           
           if [ -n "$CHORE" ]; then
-            CHANGELOG="${CHANGELOG}\n### 🔧 其他改动\n${CHORE}\n"
+            CHANGELOG="${CHANGELOG}\n### 其他改动\n${CHORE}\n"
           fi
           
           if [ -n "$OTHER" ]; then
-            CHANGELOG="${CHANGELOG}\n### 📦 其他提交\n${OTHER}\n"
+            CHANGELOG="${CHANGELOG}\n### 其他提交\n${OTHER}\n"
           fi
           
           # 如果没有内容，使用默认消息
           if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="### 📦 初始发布"
+            CHANGELOG="### 初始发布"
           fi
           
           # 将 changelog 写入输出（转义特殊字符）
