@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 use anyhow::{Result, Context};
-use log::warn;
+use log::{warn, debug};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -65,7 +65,9 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AiConfig {
+    #[serde(default)]
     pub api_url: String,
+    #[serde(default)]
     pub api_key: String,
     #[serde(default = "default_model")]
     pub model: String,
@@ -75,6 +77,19 @@ pub struct AiConfig {
     pub max_tokens: u32,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            api_url: String::new(),
+            api_key: String::new(),
+            model: default_model(),
+            trigger: default_trigger(),
+            max_tokens: default_max_tokens(),
+            temperature: default_temperature(),
+        }
+    }
 }
 
 fn default_model() -> String { "gpt-3.5-turbo".to_string() }
@@ -184,15 +199,32 @@ impl Config {
         let mut config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config file")?;
         
-        // 检查 AI 配置：如果使用 Ollama，不需要 api_url/api_key
-        if let Some(ref ai) = config.ai {
-            let using_ollama = config.ollama.as_ref().map(|o| o.enabled).unwrap_or(false);
-            
-            // 如果使用 Ollama，即使 api_key/api_url 为空也保留 AI 配置
-            if !using_ollama && (ai.api_key.is_empty() || ai.api_url.is_empty()) {
-                warn!("AI configuration incomplete (api_key or api_url is empty) and Ollama is not enabled. AI features will be disabled.");
-                config.ai = None;
+        // 检查 AI 配置
+        let using_ollama = config.ollama.as_ref().map(|o| o.enabled).unwrap_or(false);
+        
+        if let Some(ref mut ai) = config.ai {
+            if using_ollama {
+                // Ollama 模式：确保 ollama URL 有效
+                if let Some(ref mut ollama) = config.ollama {
+                    if ollama.url.is_empty() {
+                        ollama.url = "http://localhost:11434".to_string();
+                    }
+                }
+                debug!("AI mode: Ollama (model: {})", 
+                    config.ollama.as_ref().map(|o| o.model.clone()).unwrap_or_default());
+            } else {
+                // OpenAI 模式：检查必需字段
+                if ai.api_key.is_empty() || ai.api_url.is_empty() {
+                    warn!("AI configuration incomplete for OpenAI mode (api_key or api_url is empty). AI features will be disabled.");
+                    config.ai = None;
+                } else {
+                    debug!("AI mode: OpenAI-compatible (model: {})", ai.model);
+                }
             }
+        } else if using_ollama {
+            // 用户启用了 Ollama 但没有 [ai] 部分，创建默认的 AiConfig
+            debug!("Ollama enabled but no [ai] section found, creating default AI config");
+            config.ai = Some(AiConfig::default());
         }
         
         Ok(config)

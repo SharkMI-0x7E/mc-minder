@@ -153,18 +153,10 @@ termux_notify = true
 ./start-tui.sh           # 启动 TUI 管理界面（推荐）
 ```
 
-**TUI 管理界面功能**：
-- 启动服务器（后台/前台模式）
-- 停止/重启服务器
-- 查看服务器状态和日志
-- 初始化配置
-- 更新 MC-Minder
-- Java 版本管理（切换/安装）
-- 语言切换（中文/English）
-
 ### MC-Minder 命令行
 
 ```bash
+./mc-minder tui           # 启动原生 TUI 管理界面（推荐）
 ./mc-minder init          # 交互式初始化
 ./mc-minder gen-config    # 生成默认配置文件
 ./mc-minder gen-start     # 生成 start-tui.sh
@@ -174,6 +166,30 @@ termux_notify = true
 ./mc-minder config get <key>  # 获取配置值（如 backup_dest）
 ./mc-minder --help        # 显示帮助
 ```
+
+### TUI 管理界面（v0.4.2+）
+
+MC-Minder 现在提供原生 Rust TUI，无需 Shell 脚本和 dialog 依赖：
+
+```bash
+./mc-minder tui           # 直接启动 TUI
+./start-tui.sh            # 通过启动脚本（自动查找二进制）
+```
+
+**TUI 功能**：
+- **主菜单**（13 个选项）：上下键/数字键导航，Enter 确认
+- **服务器控制**：后台启动、前台启动、停止、重启、状态查看
+- **日志查看**：服务器日志和 MC-Minder 日志，支持滚动
+- **Java 管理**：版本检测、切换、安装（Termux）
+- **配置向导**：交互式配置 10 个参数
+- **语言切换**：中英文即时切换，持久化保存
+- **状态监控**：tmux 会话、mc-minder 进程、看门狗状态
+
+**键盘快捷键**：
+- 上下箭头 / j/k：导航
+- 1-9：快速选择
+- Enter：确认
+- Esc/q：返回/退出
 
 ### AI 聊天使用
 

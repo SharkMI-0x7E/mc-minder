@@ -236,15 +236,20 @@ impl AiClient {
             })
             .collect();
 
-        // 构造 /api/chat 请求
-        let chat_url = ollama.url.replace("/api/generate", "/api/chat");
+        // 构造 /api/chat URL（更健壮的处理）
+        let base_url = ollama.url
+            .trim_end_matches("/api/generate")
+            .trim_end_matches("/api/chat")
+            .trim_end_matches('/');
+        let chat_url = format!("{}/api/chat", base_url);
+        
         let request = OllamaChatRequest {
             model: ollama.model.clone(),
             messages: ollama_messages,
             stream: false,
         };
 
-        debug!("[AI] Sending request to Ollama /api/chat: {}", chat_url);
+        debug!("[AI] Sending request to Ollama: {}", chat_url);
         debug!("[AI] Ollama request: model={}, url={}", ollama.model, chat_url);
 
         let response = self.client

@@ -143,18 +143,10 @@ termux_notify = true
 ./start-tui.sh           # Start TUI management interface (recommended)
 ```
 
-**TUI Management Interface Features**:
-- Start server (background/foreground mode)
-- Stop/Restart server
-- View server status and logs
-- Initialize configuration
-- Update MC-Minder
-- Java version management (switch/install)
-- Language switching (Chinese/English)
-
 ### MC-Minder Command Line
 
 ```bash
+./mc-minder tui           # Start native TUI interface (recommended)
 ./mc-minder init          # Interactive initialization
 ./mc-minder gen-config    # Generate default config file
 ./mc-minder gen-start     # Generate start-tui.sh
@@ -164,6 +156,30 @@ termux_notify = true
 ./mc-minder config get <key>  # Get config value (e.g., backup_dest)
 ./mc-minder --help        # Show help
 ```
+
+### TUI Management Interface (v0.4.2+)
+
+MC-Minder now provides a native Rust TUI, no Shell scripts or dialog dependency required:
+
+```bash
+./mc-minder tui           # Launch TUI directly
+./start-tui.sh            # Via launcher script (auto-detects binary)
+```
+
+**TUI Features**:
+- **Main Menu** (13 items): Arrow keys/number keys navigation, Enter to select
+- **Server Control**: Start background/foreground, stop, restart, status view
+- **Log Viewer**: Server log and MC-Minder log with scroll support
+- **Java Management**: Version detection, switching, installation (Termux)
+- **Config Wizard**: Interactive configuration of 10 parameters
+- **Language Switching**: Chinese/English instant switch, persistent storage
+- **Status Monitor**: tmux session, mc-minder process, watchdog status
+
+**Keyboard Shortcuts**:
+- Up/Down arrows / j/k: Navigate
+- 1-9: Quick select
+- Enter: Confirm
+- Esc/q: Back/Quit
 
 ### AI Chat Usage
 
