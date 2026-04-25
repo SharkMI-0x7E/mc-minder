@@ -5,8 +5,13 @@ use regex::Regex;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
+use std::collections::HashSet;
 use std::sync::Arc;
 use parking_lot::Mutex;
+
+// ============================================================
+// Shared Types
+// ============================================================
 
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
@@ -15,17 +20,12 @@ pub struct ChatMessage {
     pub timestamp: chrono::DateTime<chrono::Local>,
 }
 
-pub struct LogMonitor {
-    log_path: PathBuf,
-    chat_pattern: Regex,
-    join_pattern: Regex,
-    leave_pattern: Regex,
-    death_pattern: Regex,
-}
-
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum LogEvent {
+    // Chat events now come exclusively from ChatCapture implementations.
+    // LogMonitor no longer emits this variant, but it's kept for
+    // backward compatibility with server_run.rs event processing.
     Chat(ChatMessage),
     PlayerJoin(String),
     PlayerLeave(String),
@@ -49,23 +49,61 @@ impl FileId {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ChatCaptureMode {
+    Tmux { session: String },
+    Process,
+    File,
+}
+
+// ============================================================
+// ChatCapture Trait - Unified interface for chat sources
+// ============================================================
+
+/// Trait for chat message capture. Each implementation provides
+/// a single source of truth for chat messages, eliminating the
+/// double-processing bug where both LogMonitor and ChatCapture
+/// detected the same messages.
+pub trait ChatCapture: Send {
+    /// Capture recent chat messages since the last call.
+    /// Implementations should use deduplication to avoid processing
+    /// the same message twice.
+    fn capture_recent_messages(&mut self) -> Vec<ChatMessage>;
+
+    /// Returns the name of this capture implementation for logging.
+    fn name(&self) -> &'static str;
+}
+
+// ============================================================
+// LogMonitor - Watches log file for non-chat events ONLY
+// ============================================================
+
+/// Monitors a log file for server lifecycle events (join, leave, death,
+/// start, stop). Chat messages are NOT emitted by LogMonitor — they
+/// come from ChatCapture implementations instead.
+pub struct LogMonitor {
+    log_path: PathBuf,
+    join_pattern: Regex,
+    leave_pattern: Regex,
+    death_pattern: Regex,
+}
+
 impl LogMonitor {
     pub fn new(log_path: PathBuf) -> Result<Self> {
-        let chat_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: <([^>]+)> (.+)")
-            .context("Failed to compile chat pattern")?;
-
-        let join_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) joined the game")
+        // Join pattern: handles vanilla player names
+        let join_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: ([a-zA-Z0-9_]+) joined the game")
             .context("Failed to compile join pattern")?;
 
-        let leave_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) left the game")
+        // Leave pattern: handles vanilla player names
+        let leave_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: ([a-zA-Z0-9_]+) left the game")
             .context("Failed to compile leave pattern")?;
 
-        let death_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (\w+) .*(died|was|fell|drowned|blew up|burned|froze|suffocated|starved)")
+        // Death pattern: handles various death messages
+        let death_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: ([a-zA-Z0-9_]+) .*(died|was|fell|drowned|blew up|burned|froze|suffocated|starved)")
             .context("Failed to compile death pattern")?;
 
         Ok(Self {
             log_path,
-            chat_pattern,
             join_pattern,
             leave_pattern,
             death_pattern,
@@ -117,7 +155,6 @@ impl LogMonitor {
             .context("Failed to watch log directory")?;
 
         let patterns = (
-            self.chat_pattern,
             self.join_pattern,
             self.leave_pattern,
             self.death_pattern,
@@ -171,7 +208,7 @@ impl LogMonitor {
         log_path: &PathBuf,
         last_offset: &mut u64,
         last_file_id: &mut Option<FileId>,
-        patterns: &(Regex, Regex, Regex, Regex),
+        patterns: &(Regex, Regex, Regex),
     ) -> Result<Vec<LogEvent>> {
         if !log_path.exists() {
             return Ok(Vec::new());
@@ -227,21 +264,14 @@ impl LogMonitor {
             .or_else(|_| Ok(String::from_utf8_lossy(&buffer).into_owned()))
     }
 
-    fn parse_lines(content: &str, patterns: &(Regex, Regex, Regex, Regex)) -> Vec<LogEvent> {
-        let (chat_pattern, join_pattern, leave_pattern, death_pattern) = patterns;
+    /// Parse log lines for non-chat events only.
+    /// Chat events are handled by ChatCapture implementations.
+    fn parse_lines(content: &str, patterns: &(Regex, Regex, Regex)) -> Vec<LogEvent> {
+        let (join_pattern, leave_pattern, death_pattern) = patterns;
         let mut events = Vec::new();
 
         for line in content.lines() {
-            if let Some(caps) = chat_pattern.captures(line) {
-                if let (Some(player), Some(content)) = (caps.get(2), caps.get(3)) {
-                    debug!("[Monitor] Parsed chat event: player='{}', content='{}'", player.as_str(), content.as_str());
-                    events.push(LogEvent::Chat(ChatMessage {
-                        player: player.as_str().to_string(),
-                        content: content.as_str().to_string(),
-                        timestamp: chrono::Local::now(),
-                    }));
-                }
-            } else if let Some(caps) = join_pattern.captures(line) {
+            if let Some(caps) = join_pattern.captures(line) {
                 if let Some(player) = caps.get(2) {
                     events.push(LogEvent::PlayerJoin(player.as_str().to_string()));
                 }
@@ -260,37 +290,32 @@ impl LogMonitor {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum ChatCaptureMode {
-    Tmux { session: String },
-    Process,
-    File,
-}
+// ============================================================
+// TmuxChatCapture - Captures chat from tmux session pane
+// ============================================================
 
 pub struct TmuxChatCapture {
     session: String,
     chat_pattern: Regex,
-    seen_positions: Arc<Mutex<std::collections::HashSet<u64>>>,
+    seen_positions: Arc<Mutex<HashSet<u64>>>,
 }
 
 impl TmuxChatCapture {
     pub fn new(session: String) -> Result<Self> {
-        let chat_pattern = Regex::new(r"<([a-zA-Z0-9_]+)> (.+)")
+        // Handle both vanilla: <Player> message
+        // and Fabric: [Not Secure] <Player> message
+        let chat_pattern = Regex::new(r"(?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)")
             .context("Failed to compile chat pattern")?;
 
         Ok(Self {
             session,
             chat_pattern,
-            seen_positions: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            seen_positions: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
     pub fn mode(&self) -> ChatCaptureMode {
         ChatCaptureMode::Tmux { session: self.session.clone() }
-    }
-
-    pub fn name(&self) -> &'static str {
-        "TmuxChatCapture"
     }
 
     pub fn capture_pane_output(&self) -> Result<String> {
@@ -311,7 +336,17 @@ impl TmuxChatCapture {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
-    pub async fn capture_recent_messages(&mut self) -> Vec<ChatMessage> {
+    fn hash_line(line: &str) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        line.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl ChatCapture for TmuxChatCapture {
+    fn capture_recent_messages(&mut self) -> Vec<ChatMessage> {
         let output = match self.capture_pane_output() {
             Ok(o) => o,
             Err(e) => {
@@ -355,6 +390,38 @@ impl TmuxChatCapture {
         messages
     }
 
+    fn name(&self) -> &'static str {
+        "TmuxChatCapture"
+    }
+}
+
+// ============================================================
+// FileChatCapture - Captures chat from log file
+// ============================================================
+
+pub struct FileChatCapture {
+    log_path: PathBuf,
+    chat_pattern: Regex,
+    seen_positions: Arc<Mutex<HashSet<u64>>>,
+}
+
+impl FileChatCapture {
+    pub fn new(log_path: PathBuf) -> Result<Self> {
+        // Handle both vanilla and [Not Secure] prefixed chat messages in log files
+        let chat_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)")
+            .context("Failed to compile chat pattern")?;
+
+        Ok(Self {
+            log_path,
+            chat_pattern,
+            seen_positions: Arc::new(Mutex::new(HashSet::new())),
+        })
+    }
+
+    pub fn mode(&self) -> ChatCaptureMode {
+        ChatCaptureMode::File
+    }
+
     fn hash_line(line: &str) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -364,34 +431,9 @@ impl TmuxChatCapture {
     }
 }
 
-pub struct FileChatCapture {
-    log_path: PathBuf,
-    chat_pattern: Regex,
-    seen_positions: Arc<Mutex<std::collections::HashSet<u64>>>,
-}
-
-impl FileChatCapture {
-    pub fn new(log_path: PathBuf) -> Result<Self> {
-        let chat_pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: <([a-zA-Z0-9_]+)> (.+)")
-            .context("Failed to compile chat pattern")?;
-
-        Ok(Self {
-            log_path,
-            chat_pattern,
-            seen_positions: Arc::new(Mutex::new(std::collections::HashSet::new())),
-        })
-    }
-
-    pub fn mode(&self) -> ChatCaptureMode {
-        ChatCaptureMode::File
-    }
-
-    pub fn name(&self) -> &'static str {
-        "FileChatCapture"
-    }
-
-    pub async fn capture_recent_messages(&mut self) -> Vec<ChatMessage> {
-        let content = match tokio::fs::read_to_string(&self.log_path).await {
+impl ChatCapture for FileChatCapture {
+    fn capture_recent_messages(&mut self) -> Vec<ChatMessage> {
+        let content = match std::fs::read_to_string(&self.log_path) {
             Ok(c) => c,
             Err(e) => {
                 warn!("[FileChatCapture] Failed to read log file: {}", e);
@@ -427,11 +469,137 @@ impl FileChatCapture {
         messages
     }
 
-    fn hash_line(line: &str) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        line.hash(&mut hasher);
-        hasher.finish()
+    fn name(&self) -> &'static str {
+        "FileChatCapture"
+    }
+}
+
+// ============================================================
+// ProcessChatCapture - Parses chat from process stdout lines
+// (Used by ForegroundProcess in TUI mode)
+// ============================================================
+
+pub struct ProcessChatCapture {
+    chat_pattern: Regex,
+    #[allow(dead_code)]
+    seen_positions: Arc<Mutex<HashSet<u64>>>,
+}
+
+impl ProcessChatCapture {
+    pub fn new() -> Result<Self> {
+        // Handle both vanilla: <Player> message
+        // and Fabric: [Not Secure] <Player> message
+        let chat_pattern = Regex::new(r"(?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)")
+            .context("Failed to compile chat pattern")?;
+
+        Ok(Self {
+            chat_pattern,
+            seen_positions: Arc::new(Mutex::new(HashSet::new())),
+        })
+    }
+
+    /// Parse a single line for chat messages.
+    /// Used by ForegroundProcess to parse stdout lines.
+    pub fn parse_line(&self, line: &str) -> Option<ChatMessage> {
+        if let Some(caps) = self.chat_pattern.captures(line) {
+            if let (Some(player), Some(content)) = (caps.get(1), caps.get(2)) {
+                return Some(ChatMessage {
+                    player: player.as_str().to_string(),
+                    content: content.as_str().to_string(),
+                    timestamp: chrono::Local::now(),
+                });
+            }
+        }
+        None
+    }
+}
+
+impl ChatCapture for ProcessChatCapture {
+    fn capture_recent_messages(&mut self) -> Vec<ChatMessage> {
+        // ProcessChatCapture doesn't poll; messages are pushed to it
+        // by the ForegroundProcess via parse_line(). This method
+        // returns empty since we don't have a file/tmux to poll.
+        Vec::new()
+    }
+
+    fn name(&self) -> &'static str {
+        "ProcessChatCapture"
+    }
+}
+
+// ============================================================
+// Tests
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tmux_chat_pattern_vanilla() {
+        let pattern = Regex::new(r"(?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)").unwrap();
+        let caps = pattern.captures("<Steve> hello world").unwrap();
+        assert_eq!(caps.get(1).unwrap().as_str(), "Steve");
+        assert_eq!(caps.get(2).unwrap().as_str(), "hello world");
+    }
+
+    #[test]
+    fn test_tmux_chat_pattern_not_secure() {
+        let pattern = Regex::new(r"(?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)").unwrap();
+        let caps = pattern.captures("[Not Secure] <Player_1> !help").unwrap();
+        assert_eq!(caps.get(1).unwrap().as_str(), "Player_1");
+        assert_eq!(caps.get(2).unwrap().as_str(), "!help");
+    }
+
+    #[test]
+    fn test_file_chat_pattern_vanilla() {
+        let pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)").unwrap();
+        let line = "[12:34:56] [Server thread/INFO]: <Steve> hello";
+        let caps = pattern.captures(line).unwrap();
+        assert_eq!(caps.get(2).unwrap().as_str(), "Steve");
+        assert_eq!(caps.get(3).unwrap().as_str(), "hello");
+    }
+
+    #[test]
+    fn test_file_chat_pattern_not_secure() {
+        let pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: (?:\[Not Secure\] )?<([a-zA-Z0-9_]+)> (.+)").unwrap();
+        let line = "[12:34:56] [Server thread/INFO]: [Not Secure] <Player_1> !help";
+        let caps = pattern.captures(line).unwrap();
+        assert_eq!(caps.get(2).unwrap().as_str(), "Player_1");
+        assert_eq!(caps.get(3).unwrap().as_str(), "!help");
+    }
+
+    #[test]
+    fn test_process_chat_capture_parse_line() {
+        let capture = ProcessChatCapture::new().unwrap();
+        
+        // Vanilla
+        let msg = capture.parse_line("<Steve> hello world").unwrap();
+        assert_eq!(msg.player, "Steve");
+        assert_eq!(msg.content, "hello world");
+
+        // Not Secure prefix
+        let msg = capture.parse_line("[Not Secure] <Player_1> !help").unwrap();
+        assert_eq!(msg.player, "Player_1");
+        assert_eq!(msg.content, "!help");
+
+        // Non-chat line
+        assert!(capture.parse_line("Server started on port 25565").is_none());
+    }
+
+    #[test]
+    fn test_log_monitor_join_pattern() {
+        let pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: ([a-zA-Z0-9_]+) joined the game").unwrap();
+        let line = "[12:34:56] [Server thread/INFO]: Steve joined the game";
+        let caps = pattern.captures(line).unwrap();
+        assert_eq!(caps.get(2).unwrap().as_str(), "Steve");
+    }
+
+    #[test]
+    fn test_log_monitor_leave_pattern() {
+        let pattern = Regex::new(r"\[(\d{1,2}:\d{2}:\d{2})\] \[[^\]]+\]: ([a-zA-Z0-9_]+) left the game").unwrap();
+        let line = "[12:34:56] [Server thread/INFO]: Player_1 left the game";
+        let caps = pattern.captures(line).unwrap();
+        assert_eq!(caps.get(2).unwrap().as_str(), "Player_1");
     }
 }

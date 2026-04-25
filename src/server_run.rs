@@ -6,7 +6,7 @@ use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, Duration};
 
 use crate::config::Config;
-use crate::monitor::{LogMonitor, LogEvent, ChatMessage, TmuxChatCapture, FileChatCapture};
+use crate::monitor::{LogMonitor, LogEvent, ChatMessage, TmuxChatCapture, FileChatCapture, ChatCapture};
 use crate::ai::{AiClient, ChatResult};
 use crate::context::ContextManager;
 use crate::api::HttpApi;
@@ -107,7 +107,7 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
                 tokio::select! {
                     _ = capture_timer.tick() => {
                         if let Some(ref mut cap) = tmux_capture {
-                            let messages = cap.capture_recent_messages().await;
+                            let messages = cap.capture_recent_messages();
                             for msg in messages {
                                 process_chat_event(
                                     &msg,
@@ -118,7 +118,7 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
                                 ).await;
                             }
                         } else if let Some(ref mut cap) = file_capture {
-                            let messages = cap.capture_recent_messages().await;
+                            let messages = cap.capture_recent_messages();
                             for msg in messages {
                                 process_chat_event(
                                     &msg,
