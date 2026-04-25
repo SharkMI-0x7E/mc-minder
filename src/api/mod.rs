@@ -84,10 +84,10 @@ impl HttpApi {
                 async move {
                     let mut sender_guard = sender.write().await;
                     match sender_guard.send_command(&req.command).await {
-                        Ok(_) => {
+                        Ok(response_text) => {
                             let response = CommandResponse {
                                 success: true,
-                                result: "Command sent successfully".to_string(),
+                                result: response_text.trim().to_string(),
                             };
                             Ok::<_, warp::Rejection>(warp::reply::json(&response))
                         }

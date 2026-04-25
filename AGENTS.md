@@ -13,10 +13,12 @@
 ## 核心功能
 
 - 日志监控：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
-- AI 聊天机器人：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发
-- RCON 通信：异步 RCON 协议实现，自动重连
-- 上下文记忆：按玩家保存对话历史
-- HTTP API：RESTful API 用于状态查询和命令执行
+- AI 聊天机器人：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发，内置请求限流
+- RCON 通信：持久连接池，自动重连，响应返回
+- 聊天捕获：ChatCapture trait 统一接口，支持 Tmux/File/Process 三种模式
+- 前台进程：TUI 内直接运行 Java 进程，stdio 管道实时捕获
+- 上下文记忆：按玩家保存对话历史，自动过期清理
+- HTTP API：RESTful API 用于状态查询和命令执行（返回 RCON 响应）
 - 一键安装：交互式初始化配置
 - 自动更新：内置 self-update 命令
 
@@ -169,17 +171,23 @@ mc-minder/
 │   ├── init.rs              # 交互式初始化配置
 │   ├── self_update.rs       # 自动更新功能
 │   ├── server_run.rs        # 服务器运行主循环
+│   ├── command_sender.rs     # 命令发送（RCON/Stdin连接池）
+│   ├── foreground_process.rs # 前台进程管理（Java进程stdio管道）
 │   │
 │   ├── tui/                 # TUI 模块（替代 Shell 脚本）
-│   │   ├── mod.rs           # TUI 入口 + 终端管理
+│   │   ├── mod.rs           # TUI 入口 + 终端管理 + 前台进程spawn
 │   │   └── app.rs           # 应用状态 + UI 渲染 + 事件处理
 │   │
-│   ├── monitor.rs           # 日志监控模块
-│   ├── ai.rs                # AI 聊天机器人
+│   ├── monitor/             # 日志监控 + 聊天捕获模块
+│   │   └── mod.rs           # LogMonitor + ChatCapture trait + 实现
+│   ├── ai/                  # AI 聊天机器人
+│   │   └── mod.rs           # OpenAI/Ollama 客户端、限流
 │   ├── rcon.rs              # RCON 通信协议
 │   ├── context.rs           # 对话上下文管理
-│   ├── api.rs               # HTTP API 服务器
-│   └── notification.rs      # 通知服务（Telegram 等）
+│   ├── api/                 # HTTP API 服务器
+│   │   └── mod.rs           # warp HTTP 服务器、端点路由
+│   ├── notification.rs      # 通知服务（Telegram 等）
+│   └── update_engine.rs     # 更新引擎（异步下载+安装）
 ├── scripts/                 # Shell 脚本
 │   ├── start-tui.sh         # TUI 启动脚本（极简启动器）
 │   └── backup.sh            # 备份脚本
@@ -204,13 +212,15 @@ mc-minder/
 | `banner.rs` | 横幅/日志 | 打印版本、env_logger 初始化 |
 | `init.rs` | 初始化 | 交互式配置生成、脚本生成 |
 | `self_update.rs` | 更新 | GitHub Release 检查、二进制替换 |
-| `server_run.rs` | 运行 | 事件循环、组件协调 |
-| `tui/` | TUI | 原生终端 UI（替代 Shell 脚本） |
-| `monitor.rs` | 监控 | notify 文件监控、日志解析 |
-| `ai.rs` | AI | OpenAI/Ollama 客户端、限流 |
-| `rcon.rs` | RCON | 异步 RCON 协议、自动重连 |
-| `context.rs` | 上下文 | 对话历史、过期清理 |
-| `api.rs` | API | warp HTTP 服务器、端点路由 |
+| `server_run.rs` | 运行 | 事件循环、AI聊天处理、组件协调 |
+| `command_sender.rs` | 命令发送 | PooledRconSender(持久连接+自动重连)、StdinCommandSender、MultiCommandSender |
+| `foreground_process.rs` | 前台进程 | Java进程spawn、stdin/stdout/stderr管道、chat解析 |
+| `tui/` | TUI | 原生终端UI + RunningForeground状态(进程内前台运行) |
+| `monitor/` | 监控 | LogMonitor(notify文件监控)、ChatCapture trait、Tmux/File/Process实现 |
+| `ai/` | AI | OpenAI/Ollama 双后端、请求限流 |
+| `rcon.rs` | RCON | 异步 RCON 协议、底层包处理 |
+| `context.rs` | 上下文 | 按玩家对话历史、过期清理 |
+| `api/` | API | warp HTTP 服务器、命令执行(返回RCON响应) |
 | `notification.rs` | 通知 | Telegram Bot API |
 ```
 
@@ -357,6 +367,7 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 - [ ] 不要写太长的 commit message，保持在 50 字符以内
 
 ## 更新日志
+- 2026-04-25: **v0.4.9 发布!** AI 聊天机器人重大重写：ChatCapture trait 统一捕获、PooledRconSender 持久连接、ForegroundProcess TUI 内前台运行、[Not Secure] regex 修复、[AI] 日志前缀标准化
 - 2026-04-21: **v0.3.14 发布!** 修复编译错误、clippy 警告、代码质量优化
 - 2026-04-21: **v0.3.13 发布!** 修复 AI 聊天无响应问题、改进日志解析、增强 debug 日志
 - 2026-04-21: **v0.3.12 发布!** 改进配置读取、添加前台运行、修复符号链接权限
@@ -417,6 +428,8 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 - ai        - AI 聊天功能相关
 - api       - HTTP API 相关
 - context   - 对话上下文管理
+- cmd-sender - 命令发送相关
+- fg-proc   - 前台进程相关
 - ci        - CI/CD 工作流
 - release   - 版本发布
 ```

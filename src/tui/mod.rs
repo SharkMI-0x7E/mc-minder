@@ -10,6 +10,7 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
     use crossterm::execute;
     use ratatui::{backend::CrosstermBackend, Terminal};
     use std::time::Duration;
+    use crate::foreground_process::ForegroundProcess;
 
     let mut app = App::new(config_path.clone());
 
@@ -24,6 +25,53 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
     loop {
         // Process async update messages first
         app.process_update_messages();
+
+        // Poll foreground process output if active
+        if matches!(app.state, app::AppState::RunningForeground) {
+            // If we just entered RunningForeground state and haven't spawned the process yet
+            if app.foreground_process.is_none() {
+                // Load config to get server params
+                if let Ok(config) = crate::config::Config::load(config_path) {
+                    let jar = config.server.jar.clone();
+                    let min_mem = config.server.min_mem.clone();
+                    let max_mem = config.server.max_mem.clone();
+
+                    match ForegroundProcess::spawn(
+                        &jar,
+                        &min_mem,
+                        &max_mem,
+                        None,  // No jvm_flags from config
+                        None,   // No jdk_path from config
+                    ).await {
+                        Ok(proc) => {
+                            log::info!("[TUI] Foreground server process spawned successfully");
+                            app.foreground_process = Some(proc);
+                            app.fg_server_alive = true;
+                            app.fg_console_lines.push("=== MC-Minder: Server starting... ===".to_string());
+                        }
+                        Err(e) => {
+                            log::error!("[TUI] Failed to spawn foreground server: {}", e);
+                            app.fg_console_lines.push(format!("Failed to start server: {}", e));
+                            app.state = app::AppState::MainMenu;
+                        }
+                    }
+                } else {
+                    app.fg_console_lines.push("Failed to load configuration".to_string());
+                    app.state = app::AppState::MainMenu;
+                }
+            } else {
+                // Poll for new output from foreground process
+                app.poll_foreground_output();
+
+                // Check if process has exited and update state
+                let alive = app.is_foreground_process_alive();
+                app.fg_server_alive = alive;
+                if !alive {
+                    app.fg_console_lines.push("=== MC-Minder: Server has stopped ===".to_string());
+                    app.foreground_process = None;
+                }
+            }
+        }
 
         terminal.draw(|f| {
             app.draw(f);
@@ -54,15 +102,16 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
         }
     }
 
-    // Restore terminal before starting foreground server
+    // Restore terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
 
-    // If foreground server was requested, start it now
+    // If foreground server was requested (legacy mode - exit and run Java directly)
     if app.foreground_requested {
-        let jar = app.get_jar();
-        let min_mem = app.get_min_mem();
-        let max_mem = app.get_max_mem();
+        let config = crate::config::Config::load(config_path).ok();
+        let jar = config.as_ref().map(|c| c.server.jar.clone()).unwrap_or_default();
+        let min_mem = config.as_ref().map(|c| c.server.min_mem.clone()).unwrap_or_else(|| "512M".to_string());
+        let max_mem = config.as_ref().map(|c| c.server.max_mem.clone()).unwrap_or_else(|| "1G".to_string());
 
         println!();
         println!("Starting Minecraft server in foreground...");

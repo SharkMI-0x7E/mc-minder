@@ -36,7 +36,7 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
     let ai_client = if let Some(ref ai_config) = config.ai {
         Some(AiClient::new(ai_config.clone(), config.ollama.clone())?)
     } else {
-        warn!("No AI configuration found, AI features disabled");
+        warn!("[AI] No AI configuration found, AI features disabled");
         None
     };
 
@@ -47,9 +47,9 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
 
     let trigger = ai_client.as_ref().map(|a| a.get_trigger().to_string());
 
+    // Use pooled RCON for persistent connection with auto-reconnect
     let mut command_sender = MultiCommandSender::new();
-
-    command_sender.add_sender(CommandSender::rcon(
+    command_sender.add_sender(CommandSender::pooled_rcon(
         config.rcon.host.clone(),
         config.rcon.port,
         config.rcon.password.clone(),
@@ -144,7 +144,7 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
                             LogEvent::PlayerJoin(player) => {
                                 info!("[Join] {} joined the game", player);
                                 let mut sender = rcon_sender.write().await;
-                                if let Err(e) = sender.send_command(&format!("say Welcome {}!", player)).await {
+                                if let Err(e) = sender.send_command_ignore_response(&format!("say Welcome {}!", player)).await {
                                     warn!("[AI] Failed to send welcome message: {}", e);
                                 }
                                 let join_message = format!("*MC-Minder Alert*\n\nPlayer *{}* joined the game", player);
@@ -238,8 +238,8 @@ async fn process_chat_event(
             let tell_msg = format!("[AI] {}", response);
 
             match sender.send_command(&format!("tellraw {} {{\"text\":\"{}\"}}", player, escape_json(&tell_msg))).await {
-                Ok(_) => {
-                    debug!("[AI] Successfully sent response to player '{}' via tellraw", player);
+                Ok(response_text) => {
+                    debug!("[AI] Successfully sent tellraw to player '{}', response: {}", player, response_text.trim());
                 }
                 Err(e) => {
                     warn!("[AI] Failed to send tellraw to player '{}': {}, trying /say", player, e);

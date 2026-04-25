@@ -1,14 +1,15 @@
 use std::path::PathBuf;
 use std::fs;
 
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Span;
+use ratatui::text::{Span, Line};
 use ratatui::Frame;
 
 use crate::config::Config;
 use crate::update_engine::{UpdateEngine, UpdateMsg};
+use crate::foreground_process::{ForegroundProcess, ProcessOutput};
 
 // Small helper struct for configuration wizard fields
 #[derive(Clone)]
@@ -43,6 +44,10 @@ pub struct App {
     pub last_refresh: std::time::Instant,
     // Foreground mode request
     pub foreground_requested: bool,
+    // Foreground server process (when running inside TUI)
+    pub foreground_process: Option<ForegroundProcess>,
+    pub fg_console_lines: Vec<String>,
+    pub fg_server_alive: bool,  // Cached is_running state
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -60,6 +65,7 @@ pub enum AppState {
     StatusView,
     Console,  // Real-time console output
     UpdateView,  // Update progress view
+    RunningForeground,  // Running foreground server inside TUI
 }
 
 // Update state machine
@@ -123,6 +129,9 @@ impl App {
             console_auto_refresh: true,
             last_refresh: std::time::Instant::now(),
             foreground_requested: false,
+            foreground_process: None,
+            fg_console_lines: Vec::new(),
+            fg_server_alive: false,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -140,6 +149,7 @@ impl App {
             AppState::StatusView => self.on_key_status_view(key),
             AppState::Console => self.on_key_console(key),
             AppState::UpdateView => self.on_key_update_view(key),
+            AppState::RunningForeground => self.on_key_running_foreground(key),
         }
     }
 
@@ -644,6 +654,134 @@ impl App {
         self.state = AppState::Console;
     }
 
+    fn on_key_running_foreground(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            // 'q' or Esc to stop server and return to menu
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.foreground_process = None;
+                self.state = AppState::MainMenu;
+            }
+            _ => {}
+        }
+    }
+
+    /// Poll foreground process for new console output lines (non-blocking)
+    pub fn poll_foreground_output(&mut self) {
+        if let Some(ref mut proc) = self.foreground_process {
+            // Collect all available output lines
+            loop {
+                match proc.recv_console_output() {
+                    Some(ProcessOutput::Stdout(line)) => {
+                        self.fg_console_lines.push(line);
+                    }
+                    Some(ProcessOutput::Stderr(line)) => {
+                        self.fg_console_lines.push(format!("[stderr] {}", line));
+                    }
+                    None => break,
+                }
+            }
+            // Also collect chat messages and log them
+            loop {
+                match proc.recv_chat_message() {
+                    Some(msg) => {
+                        log::info!("[FG-Chat] {}: {}", msg.player, msg.content);
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+
+    /// Check if foreground process has exited
+    pub fn is_foreground_process_alive(&mut self) -> bool {
+        if let Some(ref mut proc) = self.foreground_process {
+            proc.is_running()
+        } else {
+            false
+        }
+    }
+
+    fn draw_running_foreground(&mut self, f: &mut Frame) {
+        let title = if matches!(self.language, Language::Chinese) {
+            "前台服务器运行中 (q:返回菜单 s:停止服务器)"
+        } else {
+            "Foreground Server Running (q:Back s:Stop)"
+        };
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        // Title bar
+        let title_bar = Paragraph::new(Span::styled(
+            title,
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ));
+        f.render_widget(title_bar, chunks[0]);
+
+        // Console output
+        let max_lines = chunks[1].height as usize;
+        let total_lines = self.fg_console_lines.len();
+
+        // Auto-scroll to bottom
+        if total_lines > max_lines {
+            self.console_scroll = total_lines - max_lines;
+        } else {
+            self.console_scroll = 0;
+        }
+
+        let visible_lines: Vec<Line> = self.fg_console_lines
+            .iter()
+            .skip(self.console_scroll)
+            .take(max_lines)
+            .map(|line| Line::from(Span::raw(line.clone())))
+            .collect();
+
+        let console = Paragraph::new(visible_lines)
+            .block(Block::default().borders(Borders::ALL).title(if matches!(self.language, Language::Chinese) {
+                "服务器输出"
+            } else {
+                "Server Output"
+            }))
+            .wrap(Wrap { trim: false });
+        f.render_widget(console, chunks[1]);
+
+        // Status bar
+        let status = if self.foreground_process.is_some() {
+            if self.fg_server_alive {
+                if matches!(self.language, Language::Chinese) {
+                    "状态: 运行中"
+                } else {
+                    "Status: Running"
+                }
+            } else {
+                if matches!(self.language, Language::Chinese) {
+                    "状态: 已停止"
+                } else {
+                    "Status: Stopped"
+                }
+            }
+        } else {
+            if matches!(self.language, Language::Chinese) {
+                "状态: 未启动"
+            } else {
+                "Status: Not started"
+            }
+        };
+
+        let status_bar = Paragraph::new(Span::styled(
+            status,
+            Style::default().fg(Color::Green),
+        ));
+        f.render_widget(status_bar, chunks[2]);
+    }
+
     fn execute_main_menu_action(&mut self, index: usize) {
         match index {
             0 => self.start_server_background(),
@@ -794,20 +932,19 @@ impl App {
         let jar = self.get_jar();
         let min_mem = self.get_min_mem();
         let max_mem = self.get_max_mem();
-        let session = self.get_session_name();
 
         self.message = Some((
             if matches!(self.language, Language::Chinese) {
-                format!("正在启动前台服务器...\n\n命令: java -Xms{} -Xmx{} -jar {} nogui\n\n会话: {}\n\n按 Ctrl+C 停止服务器", min_mem, max_mem, jar, session)
+                format!("正在启动前台服务器...\n\n命令: java -Xms{} -Xmx{} -jar {} nogui\n\n按 Ctrl+C 停止服务器", min_mem, max_mem, jar)
             } else {
-                format!("Starting foreground server...\n\nCommand: java -Xms{} -Xmx{} -jar {} nogui\n\nSession: {}\n\nPress Ctrl+C to stop server", min_mem, max_mem, jar, session)
+                format!("Starting foreground server...\n\nCommand: java -Xms{} -Xmx{} -jar {} nogui\n\nPress Ctrl+C to stop server", min_mem, max_mem, jar)
             },
             MessageType::Info,
         ));
 
-        // Mark that we want to exit TUI and start foreground server
-        self.foreground_requested = true;
-        self.should_quit = true;
+        // Transition to RunningForeground state - actual process spawn happens in poll_foreground
+        self.state = AppState::RunningForeground;
+        self.fg_console_lines = Vec::new();
     }
 
     fn stop_server(&mut self) {
@@ -1587,6 +1724,7 @@ self.state = AppState::StatusView;
             AppState::StatusView => self.draw_status_view(f),
             AppState::Console => self.draw_console(f),
             AppState::UpdateView => self.draw_update_view(f),
+            AppState::RunningForeground => self.draw_running_foreground(f),
         }
 
         // Draw message overlay if present
