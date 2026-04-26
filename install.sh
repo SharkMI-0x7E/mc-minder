@@ -24,14 +24,15 @@ log_error() {
 detect_arch() {
     local arch=$(uname -m)
     local os=$(uname -s)
-    
+
     case "$os" in
         Linux)
-            if [ -n "$TERMUX_VERSION" ] || [ -f "/system/bin/app_process" ]; then
+            if [ -n "$TERMUX_VERSION" ]; then
+                # Termux/Android - use Bionic-linked binary
                 echo "termux-aarch64"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
-                echo "termux-aarch64"
-                log_info "Note: Using termux-aarch64 binary (compatible with ARM64 Linux including non-Termux)"
+                # Native ARM64 Linux (e.g. Raspberry Pi) - NO binary available
+                echo "aarch64-linux-nobinary"
             elif [ "$arch" = "x86_64" ]; then
                 echo "x86_64-linux"
             else
@@ -59,12 +60,12 @@ detect_arch() {
 
 check_dependencies() {
     local missing=()
-    
+
     command -v curl >/dev/null 2>&1 || missing+=("curl")
-    
+
     if [ ${#missing[@]} -ne 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
-        
+
         if [ -n "$TERMUX_VERSION" ]; then
             log_info "Installing dependencies..."
             pkg install -y ${missing[*]}
@@ -79,7 +80,7 @@ get_latest_version() {
     local version=""
     local retry_count=0
     local max_retries=3
-    
+
     while [ $retry_count -lt $max_retries ]; do
         version=$(curl -s \
             --connect-timeout 10 \
@@ -88,20 +89,20 @@ get_latest_version() {
             --retry-delay 3 \
             "https://api.github.com/repos/$REPO/releases/latest" | \
             grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-        
+
         if [ -n "$version" ] && [ "$version" != "" ] && [ "$version" != "null" ]; then
             echo "$version"
             return 0
         fi
-        
+
         retry_count=$((retry_count + 1))
-        
+
         if [ $retry_count -lt $max_retries ]; then
             log_warn "Failed to get version (attempt $retry_count/$max_retries), retrying..."
             sleep 2
         fi
     done
-    
+
     echo ""
     return 1
 }
@@ -112,10 +113,10 @@ download_with_retry() {
     local description="$3"
     local retry_count=0
     local max_retries=3
-    
+
     while [ $retry_count -lt $max_retries ]; do
         log_info "Downloading $description (attempt $((retry_count + 1))/$max_retries)..."
-        
+
         if curl -L \
             --connect-timeout 15 \
             --max-time 120 \
@@ -124,7 +125,7 @@ download_with_retry() {
             --progress-bar \
             -o "$output" \
             "$url"; then
-            
+
             if [ -f "$output" ] && [ -s "$output" ]; then
                 return 0
             else
@@ -135,91 +136,64 @@ download_with_retry() {
             log_warn "Download failed"
             rm -f "$output"
         fi
-        
+
         retry_count=$((retry_count + 1))
-        
+
         if [ $retry_count -lt $max_retries ]; then
             sleep 3
         fi
     done
-    
+
     return 1
 }
 
 download_binary() {
     local target="$1"
     local version="$2"
-    
+
     local binary_name="$BINARY_NAME-$target"
     local url="https://github.com/$REPO/releases/download/v$version/$binary_name"
-    
+
     log_info "Downloading MC-Minder v$version for $target..."
-    
+
     if ! download_with_retry "$url" "$BINARY_NAME" "binary ($target)"; then
         return 1
     fi
-    
+
     chmod +x "$BINARY_NAME"
-    
+
     return 0
 }
 
 download_scripts() {
     local version="$1"
     local base_url="https://raw.githubusercontent.com/$REPO/v$version/scripts"
-    
+
     if [ ! -f "backup.sh" ]; then
         log_info "Downloading backup.sh..."
         if download_with_retry "$base_url/backup.sh" "backup.sh" "backup script"; then
             chmod +x "backup.sh"
         else
-            log_warn "Failed to download backup.sh"
+            log_warn "Failed to download backup.sh (optional, skip)"
         fi
     else
         log_info "backup.sh already exists, skipping"
     fi
-    
+
     if [ ! -f "start-tui.sh" ]; then
-        log_info "Downloading start-tui.sh (TUI interface)..."
+        log_info "Downloading start-tui.sh (TUI launcher)..."
         if download_with_retry "$base_url/start-tui.sh" "start-tui.sh" "TUI startup script"; then
             chmod +x "start-tui.sh"
             log_info ""
             log_info "TUI script downloaded! You can use it with:"
             log_info "  ./start-tui.sh"
             log_info ""
-            
-            if ! command -v dialog >/dev/null 2>&1; then
-                log_warn "Note: 'dialog' is required for TUI mode"
-                log_warn "Install it with: pkg install dialog (Termux) or apt install dialog (Linux)"
-            fi
         else
-            log_warn "Failed to download start-tui.sh"
+            log_warn "Failed to download start-tui.sh (optional, run './mc-minder tui' directly)"
         fi
     else
         log_info "start-tui.sh already exists, skipping"
     fi
-    
-    # 下载必要的脚本库文件
-    log_info "Downloading script libraries..."
-    local scripts_dir="scripts"
-    mkdir -p "$scripts_dir"
-    
-    local required_scripts=("common.sh" "config.sh" "java.sh" "server.sh" "log.sh" "menu.sh")
-    
-    for script in "${required_scripts[@]}"; do
-        if [ ! -f "$scripts_dir/$script" ]; then
-            log_info "Downloading $script..."
-            if download_with_retry "$base_url/$script" "$scripts_dir/$script" "$script library"; then
-                chmod +x "$scripts_dir/$script"
-            else
-                log_warn "Failed to download $script"
-            fi
-        else
-            log_info "$script already exists, skipping"
-        fi
-    done
-    
-    log_info "Script libraries downloaded"
 }
 
 show_post_install_instructions() {
@@ -229,11 +203,12 @@ show_post_install_instructions() {
     echo -e "${BLUE}Next steps:${NC}"
     echo "  1. Run: ./$BINARY_NAME init          # Initialize configuration"
     echo "  2. Place fabric-server.jar here         # Minecraft server jar"
-    echo "  3. Run: ./start-tui.sh                 # Start with TUI menu"
+    echo "  3. Run: ./$BINARY_NAME tui             # Start with native TUI"
     echo ""
     echo -e "${BLUE}Useful commands:${NC}"
     echo "  ./$BINARY_NAME --version               # Show version"
     echo "  ./$BINARY_NAME self-update             # Update to latest version"
+    echo "  ./$BINARY_NAME init                    # Interactive configuration"
     echo ""
     echo -e "${BLUE}For more information:${NC} https://github.com/$REPO"
 }
@@ -243,53 +218,67 @@ main() {
     echo -e "${BLUE}MC-Minder Installer${NC}"
     echo "========================="
     echo ""
-    
+
     check_dependencies
-    
+
     local target=$(detect_arch)
-    
+
     if [ "$target" = "unknown" ]; then
         log_error "Unsupported platform: $(uname -s) $(uname -m)"
         log_info "Supported platforms:"
         log_info "  - Linux x86_64"
-        log_info "  - Linux aarch64"
         log_info "  - Termux/Android ARM64"
-        log_info "  - macOS (experimental)"
         echo ""
         log_info "Please compile from source: https://github.com/$REPO"
         exit 1
     fi
-    
+
+    if [ "$target" = "aarch64-linux-nobinary" ]; then
+        log_error "No pre-built binary for ARM64 Linux (non-Termux)"
+        echo ""
+        log_info "The pre-built binaries currently only support:"
+        log_info "  - Linux x86_64 (mc-minder-x86_64-linux)"
+        log_info "  - Termux/Android ARM64 (mc-minder-termux-aarch64)"
+        echo ""
+        log_info "For ARM64 Linux (Raspberry Pi, etc.), please compile from source:"
+        log_info "  1. Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        log_info "  2. Clone: git clone https://github.com/$REPO.git"
+        log_info "  3. Build: cd mc-minder && cargo build --release"
+        log_info "  4. The binary will be at: target/release/mc-minder"
+        exit 1
+    fi
+
     log_info "Detected platform: $target"
-    
+
     local version=""
-    
+
     if [ $# -gt 0 ] && [ -n "$1" ]; then
         version="$1"
         log_info "Using specified version: $version"
     else
         log_info "Checking latest version from GitHub..."
         version=$(get_latest_version)
-        
+
         if [ -z "$version" ]; then
             log_error "Failed to get latest version from GitHub API"
             echo ""
             log_info "Possible reasons:"
             log_info "  1. Network connection issue"
-            log_info "  2. GitHub API rate limited"
+            log_info "  2. GitHub API rate limited (60 req/hour for unauthenticated)"
             log_info "  3. No releases available yet"
             echo ""
             log_info "You can specify version manually:"
             log_info "  $0 <version>"
-            log_info "Example: $0 0.3.6"
+            log_info "Example: $0 0.5.1"
             exit 1
         fi
-        
+
         log_info "Latest version: $version"
     fi
-    
+
     if [ -f "$BINARY_NAME" ]; then
-        log_warn "MC-Minder already exists (size: $(du -h $BINARY_NAME | cut -f1))"
+        local existing_size=$(du -h "$BINARY_NAME" 2>/dev/null | cut -f1)
+        log_warn "MC-Minder already exists (size: $existing_size)"
         echo ""
         echo "Options:"
         echo "  y) Reinstall (overwrite existing binary)"
@@ -311,7 +300,7 @@ main() {
                 ;;
         esac
     fi
-    
+
     if [ ! -f "$BINARY_NAME" ]; then
         echo ""
         if ! download_binary "$target" "$version"; then
@@ -323,14 +312,14 @@ main() {
             log_info "  3. Try compiling from source: https://github.com/$REPO"
             exit 1
         fi
-        
+
         local size=$(du -h "$BINARY_NAME" | cut -f1)
         log_info "Downloaded successfully ($size)"
     fi
-    
+
     echo ""
     download_scripts "$version"
-    
+
     show_post_install_instructions
 }
 
