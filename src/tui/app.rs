@@ -106,10 +106,20 @@ pub enum MessageType {
 impl App {
     pub fn new(config_path: PathBuf) -> Self {
         let cfg = Config::load(&config_path).ok();
+
+        // Try to load saved language preference
+        let (language, initial_state) = match Self::load_language() {
+            Some(lang) => (lang, AppState::MainMenu),
+            None => {
+                // First launch: show language selection in English
+                (Language::English, AppState::LanguageSelect)
+            }
+        };
+
         App {
-            state: AppState::MainMenu,
+            state: initial_state,
             should_quit: false,
-            language: Language::Chinese,
+            language,
             config_path,
             config: cfg,
             main_menu_selected: 0,
@@ -1372,6 +1382,45 @@ self.state = AppState::StatusView;
             Language::English => "en",
         };
         let _ = std::fs::write(lang_file, lang_str);
+
+        // Also save language to config.toml for persistence
+        if let Ok(content) = std::fs::read_to_string(&self.config_path) {
+            let lang_line = format!("language = \"{}\"", lang_str);
+            let new_content = if content.contains("language = ") {
+                // Replace existing language line
+                let lines: Vec<String> = content.lines()
+                    .map(|l| {
+                        if l.trim_start().starts_with("language = ") {
+                            lang_line.clone()
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .collect();
+                lines.join("\n")
+            } else {
+                // Append at end
+                format!("{}\n{}", content.trim_end(), lang_line)
+            };
+            let _ = std::fs::write(&self.config_path, new_content);
+        }
+    }
+
+    fn load_language() -> Option<Language> {
+        let lang_file = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".mc-minder/lang.conf");
+
+        if !lang_file.exists() {
+            return None;
+        }
+
+        let content = std::fs::read_to_string(lang_file).ok()?;
+        match content.trim() {
+            "zh" => Some(Language::Chinese),
+            "en" => Some(Language::English),
+            _ => None,
+        }
     }
 
     // Helper methods
