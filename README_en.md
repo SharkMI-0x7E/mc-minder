@@ -70,6 +70,14 @@ cargo build --release
 cargo build --target aarch64-linux-android --release
 ```
 
+### Linux ARM64 (Raspberry Pi etc.)
+
+```bash
+cargo build --target aarch64-unknown-linux-gnu --release
+```
+
+Or download the pre-built binary from the [Releases](https://github.com/SharkMI-0x7E/mc-minder/releases/latest) page (`mc-minder-aarch64-linux`).
+
 ## Usage
 
 ### Directory Structure

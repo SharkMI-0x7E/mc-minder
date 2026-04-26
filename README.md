@@ -82,6 +82,14 @@ cargo build --release
 cargo build --target aarch64-linux-android --release
 ```
 
+### Linux ARM64（树莓派等）
+
+```bash
+cargo build --target aarch64-unknown-linux-gnu --release
+```
+
+或者从 [Releases](https://github.com/SharkMI-0x7E/mc-minder/releases/latest) 下载预编译二进制文件 (`mc-minder-aarch64-linux`)。
+
 ## 使用方法
 
 ### 目录结构

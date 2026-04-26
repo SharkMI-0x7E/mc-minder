@@ -89,8 +89,51 @@ jobs:
           name: mc-minder-termux-aarch64
           path: mc-minder-termux-aarch64
 
+  build-linux-aarch64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-aarch64-linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-linux-cargo-
+
+      - name: Install cross via binstall
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y cross
+
+      - name: Build for Linux ARM64
+        run: cross build --target aarch64-unknown-linux-gnu --release
+
+      - name: Rename binary
+        run: |
+          mv target/aarch64-unknown-linux-gnu/release/mc-minder mc-minder-aarch64-linux
+          chmod +x mc-minder-aarch64-linux
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-aarch64-linux
+          path: mc-minder-aarch64-linux
+
   release:
-    needs: [build-linux-x86_64, build-termux-aarch64]
+    needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -234,6 +277,7 @@ jobs:
             | 平台 | 文件 | 说明 |
             |------|------|------|
             | Linux x64 | `mc-minder-x86_64-linux` | 适用于桌面 Linux / WSL |
+            | Linux ARM64 | `mc-minder-aarch64-linux` | 适用于树莓派 / ARM 服务器 |
             | Termux/Android ARM64 | `mc-minder-termux-aarch64` | 适用于手机 Termux 环境 |
             
             ### 安装
@@ -244,6 +288,7 @@ jobs:
           files: |
             binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
             binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
+            binaries/mc-minder-aarch64-linux/mc-minder-aarch64-linux
             install.sh
           draft: false
           prerelease: false

@@ -7,7 +7,7 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.5.0 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.5.2 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能
@@ -98,12 +98,26 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 - **输出文件**: `mc-minder-termux-aarch64`
 - **缓存**: 使用 `actions/cache@v3` 缓存 cargo registry 和 target 目录
 
-#### 3. Release 发布 (`release`)
-- **依赖**: `needs: [build-linux-x86_64, build-termux-aarch64]`
+#### 3. Linux ARM64 构建 (`build-linux-aarch64`)
+- **Runner**: `ubuntu-latest`
+- **工具链**: `dtolnay/rust-toolchain@stable` + `aarch64-unknown-linux-gnu` target
+- **安装 cross**: 使用 `cargo-binstall -y cross` 快速安装预编译版本
+- **Cross 配置文件**: `Cross.toml`
+  ```toml
+  [target.aarch64-unknown-linux-gnu]
+  image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+  ```
+- **构建命令**: `cross build --target aarch64-unknown-linux-gnu --release`
+- **输出文件**: `mc-minder-aarch64-linux`
+- **缓存**: 使用 `actions/cache@v3` 缓存 cargo registry 和 target 目录
+
+#### 4. Release 发布 (`release`)
+- **依赖**: `needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64]`
 - **发布工具**: `softprops/action-gh-release@v1`
 - **附件文件**:
   - `binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux`
   - `binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64`
+  - `binaries/mc-minder-aarch64-linux/mc-minder-aarch64-linux`
   - `install.sh`
 
 ### CI/CD 坑点总结 (血泪史!)
@@ -317,7 +331,7 @@ Release 页面会自动按以下分类显示更新内容：
 ### 最终 Release 页面示例
 
 ```markdown
-## MC-Minder v0.4.1
+## MC-Minder v0.5.2
 
 ### 新功能
 - Add intelligent path detection in start-tui.sh
@@ -342,6 +356,7 @@ Release 页面会自动按以下分类显示更新内容：
 | 平台 | 文件 | 说明 |
 |------|------|------|
 | Linux x64 | `mc-minder-x86_64-linux` | 适用于桌面 Linux / WSL |
+| Linux ARM64 | `mc-minder-aarch64-linux` | 适用于树莓派 / ARM 服务器 |
 | Termux/Android ARM64 | `mc-minder-termux-aarch64` | 适用于手机 Termux 环境 |
 
 ### 安装
@@ -367,6 +382,8 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 - [ ] 不要写太长的 commit message，保持在 50 字符以内
 
 ## 更新日志
+- 2026-04-26: **v0.5.2 发布!** 添加 Linux ARM64 交叉编译支持（aarch64-unknown-linux-gnu），修复 install.sh 的各种问题（ARM64 检测、脚本库下载、dialog 过期警告）
+- 2026-04-26: **v0.5.1 发布!** 消除所有 dead_code 警告，删除未使用的 rcon 模块，更新 README
 - 2026-04-26: **v0.5.0 发布!** 彻底移除 LLM/AI 功能，完善初始化配置（Java 自动检测、JDK 路径配置），增强 TUI Java 菜单（版本检测、安装指引）
 - 2026-04-25: **v0.4.9 发布!** AI 聊天机器人重大重写：ChatCapture trait 统一捕获、PooledRconSender 持久连接、ForegroundProcess TUI 内前台运行、[Not Secure] regex 修复、[AI] 日志前缀标准化
 - 2026-04-21: **v0.3.14 发布!** 修复编译错误、clippy 警告、代码质量优化

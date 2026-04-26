@@ -31,8 +31,8 @@ detect_arch() {
                 # Termux/Android - use Bionic-linked binary
                 echo "termux-aarch64"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
-                # Native ARM64 Linux (e.g. Raspberry Pi) - NO binary available
-                echo "aarch64-linux-nobinary"
+                # Native ARM64 Linux (e.g. Raspberry Pi)
+                echo "aarch64-linux"
             elif [ "$arch" = "x86_64" ]; then
                 echo "x86_64-linux"
             else
@@ -230,21 +230,6 @@ main() {
         log_info "  - Termux/Android ARM64"
         echo ""
         log_info "Please compile from source: https://github.com/$REPO"
-        exit 1
-    fi
-
-    if [ "$target" = "aarch64-linux-nobinary" ]; then
-        log_error "No pre-built binary for ARM64 Linux (non-Termux)"
-        echo ""
-        log_info "The pre-built binaries currently only support:"
-        log_info "  - Linux x86_64 (mc-minder-x86_64-linux)"
-        log_info "  - Termux/Android ARM64 (mc-minder-termux-aarch64)"
-        echo ""
-        log_info "For ARM64 Linux (Raspberry Pi, etc.), please compile from source:"
-        log_info "  1. Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-        log_info "  2. Clone: git clone https://github.com/$REPO.git"
-        log_info "  3. Build: cd mc-minder && cargo build --release"
-        log_info "  4. The binary will be at: target/release/mc-minder"
         exit 1
     fi
 
