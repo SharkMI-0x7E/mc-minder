@@ -203,15 +203,25 @@ MC-Minder 提供完整的 Java 管理功能：
 **自动检测**：
 - `init` 命令自动运行 `java -version` 检测
 - TUI Java 菜单扫描系统默认、自定义路径和常见安装目录
+- 支持 `$JAVA_HOME`、`$JDK_HOME`、`update-alternatives`、`which -a java`
 
-**平台安装指引**：
-- **Termux**：`pkg install openjdk-17`
-- **Linux**：`apt install openjdk-17-jre` / `dnf install java-17-openjdk`
-- **macOS**：`brew install openjdk@17`
+**一键安装**：
+- TUI 内直接选择 Java 版本并自动安装
+- **Termux**：`pkg install openjdk-17` / `openjdk-21`
+- **Linux**：自动检测 apt/dnf/pacman 并运行相应命令
+- **macOS**：`brew install openjdk@17` / `openjdk@21`
+
+**交互式切换**：
+- 检测到的所有 Java 版本以菜单列出
+- 上下键选择，Enter 确认切换
+- 自动写入 `config.toml` 的 `[jvm].jdk_path`
 
 **自定义 JDK**：
 - 在 `config.toml` 的 `[jvm]` 部分设置 `jdk_path`
 - TUI 配置向导支持直接编辑 JDK 路径
+
+**多服务器类型**（计划中）：
+- `config.toml` 已预留 `server_type` 字段，支持 fabric/paper/vanilla/forge 等
 
 ## HTTP API
 

@@ -60,6 +60,7 @@ pub enum AppState {
     MainMenu,
     JavaMenu,
     JavaSwitch(Vec<(String, String)>),  // (path, version) list for interactive selection
+    JavaInstall,  // Java version installation picker
     LogViewer(LogType),
     ConfigWizard,
     LanguageSelect,
@@ -157,6 +158,7 @@ impl App {
             AppState::MainMenu => self.on_key_main_menu(key),
             AppState::JavaMenu => self.on_key_java_menu(key),
             AppState::JavaSwitch(_) => self.on_key_java_switch(key),
+            AppState::JavaInstall => self.on_key_java_install(key),
             AppState::LogViewer(_) => self.on_key_log_viewer(key),
             AppState::ConfigWizard => self.on_key_config_wizard(key),
             AppState::LanguageSelect => self.on_key_language_select(key),
@@ -414,6 +416,7 @@ impl App {
             max_mem: "1G".to_string(),
             session_name: "mc_server".to_string(),
             log_file: "logs/latest.log".to_string(),
+            server_type: "fabric".to_string(),
         }
     }
 
@@ -1168,30 +1171,7 @@ self.state = AppState::StatusView;
     }
 
     fn install_java_version(&mut self) {
-        let is_termux = std::env::var("TERMUX_VERSION").is_ok()
-            || std::path::Path::new("/data/data/com.termux").exists();
-
-        let msg = if is_termux {
-            if matches!(self.language, Language::Chinese) {
-                "Termux 安装 Java:\n\npkg update\npkg install openjdk-17\npkg install ecj\n\n安装后重新启动 Termux".to_string()
-            } else {
-                "Install Java on Termux:\n\npkg update\npkg install openjdk-17\npkg install ecj\n\nRestart Termux after installation".to_string()
-            }
-        } else if cfg!(target_os = "macos") {
-            if matches!(self.language, Language::Chinese) {
-                "macOS 安装 Java:\n\nbrew install openjdk@17\n\n或从官网下载".to_string()
-            } else {
-                "Install Java on macOS:\n\nbrew install openjdk@17\n\nOr download from oracle.com".to_string()
-            }
-        } else {
-            if matches!(self.language, Language::Chinese) {
-                "Linux 安装 Java:\n\nUbuntu/Debian:\n  sudo apt install openjdk-17-jre\n\nFedora:\n  sudo dnf install java-17-openjdk\n\nArch:\n  sudo pacman -S jre17-openjdk".to_string()
-            } else {
-                "Install Java on Linux:\n\nUbuntu/Debian:\n  sudo apt install openjdk-17-jre\n\nFedora:\n  sudo dnf install java-17-openjdk\n\nArch:\n  sudo pacman -S jre17-openjdk".to_string()
-            }
-        };
-
-        self.message = Some((msg, MessageType::Info));
+        self.state = AppState::JavaInstall;
     }
 
     fn show_installed_java(&mut self) {
@@ -1690,6 +1670,157 @@ self.state = AppState::StatusView;
         f.render_stateful_widget(list, area, &mut state);
     }
 
+    fn java_install_options(&self) -> Vec<(String, String, bool)> {
+        // Returns (label, install_command, needs_confirmation)
+        let is_termux = std::env::var("TERMUX_VERSION").is_ok()
+            || std::path::Path::new("/data/data/com.termux").exists();
+
+        if is_termux {
+            vec![
+                ("OpenJDK 17".to_string(), "pkg install openjdk-17 -y".to_string(), false),
+                ("OpenJDK 21".to_string(), "pkg install openjdk-21 -y".to_string(), false),
+            ]
+        } else if cfg!(target_os = "linux") {
+            // Detect package manager
+            let has_apt = std::process::Command::new("which").arg("apt").output().map(|o| o.status.success()).unwrap_or(false);
+            let has_dnf = std::process::Command::new("which").arg("dnf").output().map(|o| o.status.success()).unwrap_or(false);
+            let has_pacman = std::process::Command::new("which").arg("pacman").output().map(|o| o.status.success()).unwrap_or(false);
+
+            if has_apt {
+                vec![
+                    ("OpenJDK 17 (apt)".to_string(), "sudo apt install -y openjdk-17-jre".to_string(), true),
+                    ("OpenJDK 21 (apt)".to_string(), "sudo apt install -y openjdk-21-jre".to_string(), true),
+                ]
+            } else if has_dnf {
+                vec![
+                    ("OpenJDK 17 (dnf)".to_string(), "sudo dnf install -y java-17-openjdk".to_string(), true),
+                    ("OpenJDK 21 (dnf)".to_string(), "sudo dnf install -y java-21-openjdk".to_string(), true),
+                ]
+            } else if has_pacman {
+                vec![
+                    ("OpenJDK 17 (pacman)".to_string(), "sudo pacman -S --noconfirm jre17-openjdk".to_string(), true),
+                    ("OpenJDK 21 (pacman)".to_string(), "sudo pacman -S --noconfirm jre21-openjdk".to_string(), true),
+                ]
+            } else {
+                vec![
+                    ("OpenJDK 17 (manual)".to_string(), "".to_string(), false),
+                    ("OpenJDK 21 (manual)".to_string(), "".to_string(), false),
+                ]
+            }
+        } else {
+            // macOS fallback
+            vec![
+                ("OpenJDK 17 (brew)".to_string(), "brew install openjdk@17".to_string(), false),
+                ("OpenJDK 21 (brew)".to_string(), "brew install openjdk@21".to_string(), false),
+            ]
+        }
+    }
+
+    fn on_key_java_install(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        let options = self.java_install_options();
+        let max = options.len().saturating_sub(1);
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.state = AppState::JavaMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.java_switch_selected = self.java_switch_selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.java_switch_selected < max {
+                    self.java_switch_selected += 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some((label, cmd, _needs_sudo)) = options.get(self.java_switch_selected) {
+                    if cmd.is_empty() {
+                        self.message = Some((
+                            if matches!(self.language, Language::Chinese) {
+                                format!("请手动安装 {}\n\n未检测到支持的包管理器", label)
+                            } else {
+                                format!("Please install {} manually\n\nNo supported package manager detected", label)
+                            },
+                            MessageType::Warning,
+                        ));
+                    } else {
+                        let result = std::process::Command::new("sh")
+                            .args(["-c", cmd])
+                            .output();
+
+                        match result {
+                            Ok(out) if out.status.success() => {
+                                self.message = Some((
+                                    if matches!(self.language, Language::Chinese) {
+                                        format!("{} 安装成功!\n\n请返回菜单使用\"切换Java版本\"选择新安装的JDK", label)
+                                    } else {
+                                        format!("{} installed successfully!\n\nGo back and use \"Switch Java Version\" to select the new JDK", label)
+                                    },
+                                    MessageType::Success,
+                                ));
+                            }
+                            Ok(out) => {
+                                let stderr = String::from_utf8_lossy(&out.stderr);
+                                self.message = Some((
+                                    if matches!(self.language, Language::Chinese) {
+                                        format!("{} 安装失败:\n{}", label, stderr.lines().last().unwrap_or("未知错误"))
+                                    } else {
+                                        format!("{} install failed:\n{}", label, stderr.lines().last().unwrap_or("Unknown error"))
+                                    },
+                                    MessageType::Warning,
+                                ));
+                            }
+                            Err(e) => {
+                                self.message = Some((
+                                    if matches!(self.language, Language::Chinese) {
+                                        format!("执行安装命令失败: {}", e)
+                                    } else {
+                                        format!("Failed to run install command: {}", e)
+                                    },
+                                    MessageType::Warning,
+                                ));
+                            }
+                        }
+                    }
+                    self.state = AppState::JavaMenu;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn draw_java_install(&self, f: &mut Frame) {
+        let options = self.java_install_options();
+        let list_items: Vec<ListItem> = options.iter()
+            .map(|(label, cmd, _)| {
+                let display = if cmd.is_empty() {
+                    format!("{} (手动安装)", label)
+                } else {
+                    label.clone()
+                };
+                ListItem::new(Span::raw(display))
+            })
+            .collect();
+
+        let mut state = ratatui::widgets::ListState::default();
+        state.select(Some(self.java_switch_selected));
+
+        let title = match self.language {
+            Language::Chinese => "安装 Java 版本 (Enter确认 Esc返回)",
+            Language::English => "Install Java Version (Enter to confirm Esc to cancel)",
+        };
+
+        let list = List::new(list_items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ");
+
+        let area = centered_rect(55, 25, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_stateful_widget(list, area, &mut state);
+    }
+
     fn draw_log_viewer(&self, f: &mut Frame, log_type: &LogType) {
         let content = match log_type {
             LogType::Server => &self.server_log_content,
@@ -1954,6 +2085,7 @@ self.state = AppState::StatusView;
             AppState::MainMenu => self.draw_main_menu(f),
             AppState::JavaMenu => self.draw_java_menu(f),
             AppState::JavaSwitch(versions) => self.draw_java_switch(f, versions),
+            AppState::JavaInstall => self.draw_java_install(f),
             AppState::LogViewer(log_type) => self.draw_log_viewer(f, log_type),
             AppState::ConfigWizard => self.draw_config_wizard(f),
             AppState::LanguageSelect => self.draw_language_select(f),

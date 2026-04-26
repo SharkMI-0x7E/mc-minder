@@ -41,6 +41,10 @@ pub struct ServerConfig {
     pub session_name: String,
     #[serde(default = "default_log_file")]
     pub log_file: String,
+    /// Server type: fabric, paper, vanilla, forge, etc. (reserved for future multi-type support)
+    #[serde(default = "default_server_type")]
+    #[allow(dead_code)]
+    pub server_type: String,
 }
 
 fn default_jar() -> String { "fabric-server.jar".to_string() }
@@ -48,6 +52,7 @@ fn default_min_mem() -> String { "512M".to_string() }
 fn default_max_mem() -> String { "1G".to_string() }
 fn default_session_name() -> String { "mc_server".to_string() }
 fn default_log_file() -> String { "logs/latest.log".to_string() }
+fn default_server_type() -> String { "fabric".to_string() }
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -57,6 +62,7 @@ impl Default for ServerConfig {
             max_mem: default_max_mem(),
             session_name: default_session_name(),
             log_file: default_log_file(),
+            server_type: default_server_type(),
         }
     }
 }
