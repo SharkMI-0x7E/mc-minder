@@ -26,6 +26,7 @@ pub struct App {
     pub config: Option<Config>,
     pub main_menu_selected: usize,
     pub java_menu_selected: usize,
+    pub java_switch_selected: usize,
     pub server_running: bool,
     pub mc_minder_running: bool,
     pub watchdog_running: bool,
@@ -58,6 +59,7 @@ pub struct App {
 pub enum AppState {
     MainMenu,
     JavaMenu,
+    JavaSwitch(Vec<(String, String)>),  // (path, version) list for interactive selection
     LogViewer(LogType),
     ConfigWizard,
     LanguageSelect,
@@ -124,6 +126,7 @@ impl App {
             config: cfg,
             main_menu_selected: 0,
             java_menu_selected: 0,
+            java_switch_selected: 0,
             server_running: false,
             mc_minder_running: false,
             watchdog_running: false,
@@ -152,6 +155,7 @@ impl App {
         match self.state {
             AppState::MainMenu => self.on_key_main_menu(key),
             AppState::JavaMenu => self.on_key_java_menu(key),
+            AppState::JavaSwitch(_) => self.on_key_java_switch(key),
             AppState::LogViewer(_) => self.on_key_log_viewer(key),
             AppState::ConfigWizard => self.on_key_config_wizard(key),
             AppState::LanguageSelect => self.on_key_language_select(key),
@@ -1142,7 +1146,6 @@ self.state = AppState::StatusView;
             return;
         }
 
-        // If only system default, show info
         if versions.len() == 1 {
             let (path, version) = &versions[0];
             self.message = Some((
@@ -1156,56 +1159,9 @@ self.state = AppState::StatusView;
             return;
         }
 
-        // Multiple versions: find the first non-default one and switch to it
-        let system_default = "system default (java)";
-        let switch_target = versions.iter().find(|(p, _)| !p.contains(system_default));
-
-        if let Some((target_path, target_ver)) = switch_target {
-            // Update config
-            let jdk_path = if target_path.ends_with("/java") || target_path.ends_with("\\java") || target_path == "java" {
-                // It's a full path to java binary, store it
-                target_path.to_string()
-            } else {
-                // It's a directory, append /bin/java
-                format!("{}/bin/java", target_path)
-            };
-
-            // Save to config
-            if let Some(ref mut cfg) = self.config {
-                cfg.jvm.jdk_path = Some(jdk_path.clone());
-
-                // Write updated config to file
-                let config_content = crate::init::generate_config_content(
-                    &cfg.rcon.password,
-                    &cfg.server.min_mem,
-                    &cfg.server.max_mem,
-                    &cfg.server.session_name,
-                    &cfg.server.jar,
-                    &cfg.jvm.extra_flags,
-                    &jdk_path,
-                );
-                let _ = std::fs::write(&self.config_path, &config_content);
-            }
-
-            self.message = Some((
-                if matches!(self.language, Language::Chinese) {
-                    format!("已切换到 Java:\n{}\n{}", target_ver, jdk_path)
-                } else {
-                    format!("Switched to Java:\n{}\n{}", target_ver, jdk_path)
-                },
-                MessageType::Success,
-            ));
-        } else {
-            // Only system default found
-            self.message = Some((
-                if matches!(self.language, Language::Chinese) {
-                    "仅检测到系统默认 Java，无需切换".to_string()
-                } else {
-                    "Only system default Java found, no switch needed".to_string()
-                },
-                MessageType::Info,
-            ));
-        }
+        // Transition to interactive selection screen
+        self.java_switch_selected = 0;
+        self.state = AppState::JavaSwitch(versions);
     }
 
     fn install_java_version(&mut self) {
@@ -1637,6 +1593,100 @@ self.state = AppState::StatusView;
         f.render_widget(info_para, chunks[1]);
     }
 
+    fn on_key_java_switch(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        let versions = match &self.state {
+            AppState::JavaSwitch(v) => v.clone(),
+            _ => return,
+        };
+        let max = versions.len().saturating_sub(1);
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.state = AppState::JavaMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.java_switch_selected = self.java_switch_selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.java_switch_selected < max {
+                    self.java_switch_selected += 1;
+                }
+            }
+            KeyCode::Enter => {
+                // Apply the selected Java version
+                if let Some((target_path, target_ver)) = versions.get(self.java_switch_selected) {
+                    let jdk_path = if target_path.ends_with("/java") || target_path.ends_with("\\java") {
+                        target_path.to_string()
+                    } else if target_path.contains("system default") {
+                        // System default - clear jdk_path
+                        String::new()
+                    } else {
+                        format!("{}/bin/java", target_path)
+                    };
+
+                    // Update in-memory config
+                    if let Some(ref mut cfg) = self.config {
+                        cfg.jvm.jdk_path = if jdk_path.is_empty() { None } else { Some(jdk_path.clone()) };
+
+                        // Write to config.toml
+                        let config_content = crate::init::generate_config_content(
+                            &cfg.rcon.password,
+                            &cfg.server.min_mem,
+                            &cfg.server.max_mem,
+                            &cfg.server.session_name,
+                            &cfg.server.jar,
+                            &cfg.jvm.extra_flags,
+                            &jdk_path,
+                        );
+                        let _ = std::fs::write(&self.config_path, &config_content);
+                    }
+
+                    self.message = Some((
+                        if matches!(self.language, Language::Chinese) {
+                            format!("已切换到 Java:\n{}\n{}", target_ver, if jdk_path.is_empty() { "系统默认" } else { &jdk_path })
+                        } else {
+                            format!("Switched to Java:\n{}\n{}", target_ver, if jdk_path.is_empty() { "system default" } else { &jdk_path })
+                        },
+                        MessageType::Success,
+                    ));
+                }
+                self.state = AppState::JavaMenu;
+            }
+            _ => {}
+        }
+    }
+
+    fn draw_java_switch(&self, f: &mut Frame, versions: &[(String, String)]) {
+        let list_items: Vec<ListItem> = versions.iter()
+            .map(|(path, ver)| {
+                let label = if path.contains("system default") {
+                    format!("(system) {}  [{}]", ver, path)
+                } else {
+                    format!("{}  [{}]", ver, path)
+                };
+                ListItem::new(Span::raw(label))
+            })
+            .collect();
+
+        let mut state = ratatui::widgets::ListState::default();
+        state.select(Some(self.java_switch_selected));
+
+        let title = match self.language {
+            Language::Chinese => "选择 Java 版本 (Enter确认 Esc返回)",
+            Language::English => "Select Java Version (Enter to confirm Esc to cancel)",
+        };
+
+        let list = List::new(list_items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ");
+
+        let area = centered_rect(60, 30, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_stateful_widget(list, area, &mut state);
+    }
+
     fn draw_log_viewer(&self, f: &mut Frame, log_type: &LogType) {
         let content = match log_type {
             LogType::Server => &self.server_log_content,
@@ -1900,6 +1950,7 @@ self.state = AppState::StatusView;
         match &self.state {
             AppState::MainMenu => self.draw_main_menu(f),
             AppState::JavaMenu => self.draw_java_menu(f),
+            AppState::JavaSwitch(versions) => self.draw_java_switch(f, versions),
             AppState::LogViewer(log_type) => self.draw_log_viewer(f, log_type),
             AppState::ConfigWizard => self.draw_config_wizard(f),
             AppState::LanguageSelect => self.draw_language_select(f),
