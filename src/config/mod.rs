@@ -1,13 +1,11 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 use anyhow::{Result, Context};
-use log::{warn, debug};
+// use log::warn;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub rcon: RconConfig,
-    pub ai: Option<AiConfig>,
-    pub ollama: Option<OllamaConfig>,
     #[serde(default)]
     pub server: ServerConfig,
     #[serde(default)]
@@ -62,54 +60,6 @@ impl Default for ServerConfig {
         }
     }
 }
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AiConfig {
-    #[serde(default)]
-    pub api_url: String,
-    #[serde(default)]
-    pub api_key: String,
-    #[serde(default = "default_model")]
-    pub model: String,
-    #[serde(default = "default_trigger")]
-    pub trigger: String,
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: u32,
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
-}
-
-impl Default for AiConfig {
-    fn default() -> Self {
-        Self {
-            api_url: String::new(),
-            api_key: String::new(),
-            model: default_model(),
-            trigger: default_trigger(),
-            max_tokens: default_max_tokens(),
-            temperature: default_temperature(),
-        }
-    }
-}
-
-fn default_model() -> String { "gpt-3.5-turbo".to_string() }
-fn default_trigger() -> String { "!".to_string() }
-fn default_max_tokens() -> u32 { 150 }
-fn default_temperature() -> f32 { 0.7 }
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct OllamaConfig {
-    #[serde(default = "default_ollama_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_ollama_url")]
-    pub url: String,
-    #[serde(default = "default_ollama_model")]
-    pub model: String,
-}
-
-fn default_ollama_enabled() -> bool { false }
-fn default_ollama_url() -> String { "http://localhost:11434/api/generate".to_string() }
-fn default_ollama_model() -> String { "qwen:0.5b".to_string() }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct BackupConfig {
@@ -196,42 +146,13 @@ impl Config {
     }
 
     pub fn load_from_str(content: &str) -> Result<Self> {
-        let mut config: Config = toml::from_str(content)
+        let config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config file")?;
-        
-        // 检查 AI 配置
-        let using_ollama = config.ollama.as_ref().map(|o| o.enabled).unwrap_or(false);
-        
-        if let Some(ref mut ai) = config.ai {
-            if using_ollama {
-                // Ollama 模式：确保 ollama URL 有效
-                if let Some(ref mut ollama) = config.ollama {
-                    if ollama.url.is_empty() {
-                        ollama.url = "http://localhost:11434".to_string();
-                    }
-                }
-                debug!("AI mode: Ollama (model: {})", 
-                    config.ollama.as_ref().map(|o| o.model.clone()).unwrap_or_default());
-            } else {
-                // OpenAI 模式：检查必需字段
-                if ai.api_key.is_empty() || ai.api_url.is_empty() {
-                    warn!("AI configuration incomplete for OpenAI mode (api_key or api_url is empty). AI features will be disabled.");
-                    config.ai = None;
-                } else {
-                    debug!("AI mode: OpenAI-compatible (model: {})", ai.model);
-                }
-            }
-        } else if using_ollama {
-            // 用户启用了 Ollama 但没有 [ai] 部分，创建默认的 AiConfig
-            debug!("Ollama enabled but no [ai] section found, creating default AI config");
-            config.ai = Some(AiConfig::default());
-        }
         
         Ok(config)
     }
 
     pub fn generate_template() -> String {
-        // Minimal, safe template with jdk_path option (non-raw string for stability)
         let s = "# MC-Minder Configuration File\n[jvm]\ngc = \"G1GC\"\nextra_flags = \"\"\njdk_path = \"\"  # Optional: Custom JDK path\n# xmx = \"2G\"  # Uncomment to override server.max_mem\n# xms = \"512M\"  # Uncomment to override server.min_mem\n";
         s.to_string()
     }

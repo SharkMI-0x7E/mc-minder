@@ -281,6 +281,7 @@ impl App {
             Self::default_server()
         };
         // Build fields in fixed order
+        let jdk_path = c.map(|cc| cc.jvm.jdk_path.clone().unwrap_or_default()).unwrap_or_default();
         self.wizard_fields = vec![
             WizardField { label: "服务器 JAR 文件 (Server JAR)", value: server.jar.clone() },
             WizardField { label: "最小内存 (Min Memory)", value: server.min_mem.clone() },
@@ -288,9 +289,7 @@ impl App {
             WizardField { label: "Tmux 会话名称 (TMUX Session)", value: server.session_name.clone() },
             WizardField { label: "RCON 端口 (RCON Port)", value: c.map(|cc| cc.rcon.port.to_string()).unwrap_or("25575".to_string()) },
             WizardField { label: "RCON 密码 (RCON Password)", value: c.map(|cc| cc.rcon.password.clone()).unwrap_or_default() },
-            WizardField { label: "AI 提供商 (AI Provider)", value: "openai".to_string() },
-            WizardField { label: "API 密钥 (API Key)", value: self.config.as_ref().and_then(|cfg| cfg.ai.as_ref()).map(|ai| ai.api_key.clone()).unwrap_or_default() },
-            WizardField { label: "API 模型 (API Model)", value: self.config.as_ref().and_then(|cfg| cfg.ai.as_ref()).map(|ai| ai.model.clone()).unwrap_or_else(|| "gpt-4o-mini".to_string()) },
+            WizardField { label: "JDK 路径 (JDK Path)", value: jdk_path },
             WizardField { label: "HTTP API 端口 (HTTP API Port)", value: "8080".to_string() },
         ];
         self.wizard_index = 0;
@@ -305,8 +304,6 @@ impl App {
             // create a minimal default config
             Config {
                 rcon: crate::config::RconConfig { host: "127.0.0.1".to_string(), port: 25575, password: String::new() },
-                ai: Some(crate::config::AiConfig::default()),
-                ollama: None,
                 server: crate::config::ServerConfig::default(),
                 backup: crate::config::BackupConfig::default(),
                 notification: crate::config::NotificationConfig::default(),
@@ -333,42 +330,16 @@ impl App {
             }
         }
         if self.wizard_fields.len() >= 6 {
-            // AI provider: openai or ollama
-            let provider = self.wizard_fields[6].value.trim().to_lowercase();
-            // Password
-            if self.wizard_fields.len() >= 7 {
-                cfg.rcon.password = self.wizard_fields[5].value.trim().to_string();
-            }
-
-            // Apply AI configuration depending on provider
-            if provider == "ollama" {
-                // Enable Ollama
-                cfg.ollama = Some(crate::config::OllamaConfig {
-                    enabled: true,
-                    url: "http://localhost:11434/api/generate".to_string(),
-                    model: self.wizard_fields[8].value.trim().to_string(),
-                });
-                // Disable OpenAI AI block if present
-                cfg.ai = None;
-            } else {
-                // OpenAI path
-                let ai_key = self.wizard_fields[7].value.trim().to_string();
-                let ai_model = self.wizard_fields[8].value.trim().to_string();
-                cfg.ai = Some(crate::config::AiConfig {
-                    api_url: "https://api.openai.com/v1/".to_string(),
-                    api_key: ai_key,
-                    model: ai_model,
-                    trigger: "!".to_string(),
-                    max_tokens: 150,
-                    temperature: 0.7,
-                });
-                cfg.ollama = None;
-            }
+            cfg.rcon.password = self.wizard_fields[5].value.trim().to_string();
+        }
+        if self.wizard_fields.len() >= 7 {
+            let jdk = self.wizard_fields[6].value.trim().to_string();
+            cfg.jvm.jdk_path = if jdk.is_empty() { None } else { Some(jdk) };
         }
         // Optional HTTP API port - save as a best-effort in the config file by appending
-        if self.wizard_fields.len() >= 10 {
+        if self.wizard_fields.len() >= 8 {
             // Try to store http port under [server] as http_port
-            let http_port = self.wizard_fields[9].value.trim().to_string();
+            let http_port = self.wizard_fields[7].value.trim().to_string();
             // Simple string patch (best-effort)
             // We do not panic if patching fails; just ignore in that case
             let path = self.config_path.clone();
@@ -1148,63 +1119,124 @@ self.state = AppState::StatusView;
     }
 
     fn switch_java_version(&mut self) {
-        // Detect Java versions
         let versions = self.detect_java_versions();
         if versions.is_empty() {
             self.message = Some((
                 if matches!(self.language, Language::Chinese) {
-                    "未检测到 Java 版本".to_string()
+                    "未检测到 Java 版本，请先安装 Java".to_string()
                 } else {
-                    "No Java versions detected".to_string()
+                    "No Java versions detected. Please install Java first.".to_string()
                 },
                 MessageType::Warning,
             ));
             return;
         }
-        // For now, show first version found
+
+        // If only one version, just show info
+        if versions.len() == 1 {
+            let (path, version) = &versions[0];
+            self.message = Some((
+                if matches!(self.language, Language::Chinese) {
+                    format!("当前 Java:\n{}\n{}", version, path)
+                } else {
+                    format!("Current Java:\n{}\n{}", version, path)
+                },
+                MessageType::Info,
+            ));
+            return;
+        }
+
+        // Multiple versions - show list
+        let list: Vec<String> = versions.iter()
+            .enumerate()
+            .map(|(i, (path, ver))| format!("{}. {} - {}", i + 1, ver, path))
+            .collect();
+
+        let header = if matches!(self.language, Language::Chinese) {
+            "检测到多个 Java 版本:\n"
+        } else {
+            "Multiple Java versions detected:\n"
+        };
+
         self.message = Some((
-            if matches!(self.language, Language::Chinese) {
-                format!("检测到 {} 个 Java 版本，请使用 mc-minder init 配置", versions.len())
-            } else {
-                format!("Detected {} Java versions, use mc-minder init to configure", versions.len())
-            },
+            format!("{}{}", header, list.join("\n")),
             MessageType::Info,
         ));
     }
 
     fn install_java_version(&mut self) {
-        self.message = Some((
+        let is_termux = std::env::var("TERMUX_VERSION").is_ok()
+            || std::path::Path::new("/data/data/com.termux").exists();
+
+        let msg = if is_termux {
             if matches!(self.language, Language::Chinese) {
-                "请在 Termux 中运行: pkg install openjdk-17".to_string()
+                "Termux 安装 Java:\n\npkg update\npkg install openjdk-17\npkg install ecj\n\n安装后重新启动 Termux".to_string()
             } else {
-                "Run in Termux: pkg install openjdk-17".to_string()
-            },
-            MessageType::Info,
-        ));
+                "Install Java on Termux:\n\npkg update\npkg install openjdk-17\npkg install ecj\n\nRestart Termux after installation".to_string()
+            }
+        } else if cfg!(target_os = "macos") {
+            if matches!(self.language, Language::Chinese) {
+                "macOS 安装 Java:\n\nbrew install openjdk@17\n\n或从官网下载".to_string()
+            } else {
+                "Install Java on macOS:\n\nbrew install openjdk@17\n\nOr download from oracle.com".to_string()
+            }
+        } else {
+            if matches!(self.language, Language::Chinese) {
+                "Linux 安装 Java:\n\nUbuntu/Debian:\n  sudo apt install openjdk-17-jre\n\nFedora:\n  sudo dnf install java-17-openjdk\n\nArch:\n  sudo pacman -S jre17-openjdk".to_string()
+            } else {
+                "Install Java on Linux:\n\nUbuntu/Debian:\n  sudo apt install openjdk-17-jre\n\nFedora:\n  sudo dnf install java-17-openjdk\n\nArch:\n  sudo pacman -S jre17-openjdk".to_string()
+            }
+        };
+
+        self.message = Some((msg, MessageType::Info));
     }
 
     fn show_installed_java(&mut self) {
         let versions = self.detect_java_versions();
         let msg = if versions.is_empty() {
             if matches!(self.language, Language::Chinese) {
-                "未检测到 Java 版本".to_string()
+                "未检测到 Java 版本\n\n请使用菜单中的\"安装 Java\"选项".to_string()
             } else {
-                "No Java versions detected".to_string()
+                "No Java versions detected\n\nUse \"Install Java\" from the menu".to_string()
             }
         } else {
-            versions.join("\n")
+            let lines: Vec<String> = versions.iter()
+                .map(|(path, ver)| format!("{}\n  -> {}", ver, path))
+                .collect();
+            if matches!(self.language, Language::Chinese) {
+                format!("已安装的 Java:\n\n{}", lines.join("\n"))
+            } else {
+                format!("Installed Java versions:\n\n{}", lines.join("\n"))
+            }
         };
         self.message = Some((msg, MessageType::Info));
     }
 
-    fn detect_java_versions(&self) -> Vec<String> {
+    fn detect_java_versions(&self) -> Vec<(String, String)> {
         let mut versions = Vec::new();
 
         // Check java command
         if let Ok(out) = std::process::Command::new("java").arg("-version").output() {
             let ver = String::from_utf8_lossy(&out.stderr);
             if let Some(line) = ver.lines().next() {
-                versions.push(line.to_string());
+                versions.push(("system default (java)".to_string(), line.to_string()));
+            }
+        }
+
+        // Check custom JDK path from config
+        if let Some(ref cfg) = self.config {
+            if let Some(ref jdk) = cfg.jvm.jdk_path {
+                if !jdk.is_empty() {
+                    let cmd = std::process::Command::new(jdk)
+                        .arg("-version")
+                        .output();
+                    if let Ok(out) = cmd {
+                        let ver = String::from_utf8_lossy(&out.stderr);
+                        if let Some(line) = ver.lines().next() {
+                            versions.push((jdk.clone(), line.to_string()));
+                        }
+                    }
+                }
             }
         }
 
@@ -1220,7 +1252,19 @@ self.state = AppState::StatusView;
                 for entry in entries.flatten() {
                     if let Some(name) = entry.file_name().to_str() {
                         if name.contains("jdk") || name.contains("jre") || name.contains("openjdk") {
-                            versions.push(format!("{}/{}", base, name));
+                            let full_path = format!("{}/{}", base, name);
+                            // Try to get version from this path
+                            let java_bin = format!("{}/bin/java", full_path);
+                            if std::path::Path::new(&java_bin).exists() {
+                                if let Ok(out) = std::process::Command::new(&java_bin).arg("-version").output() {
+                                    let ver = String::from_utf8_lossy(&out.stderr);
+                                    if let Some(line) = ver.lines().next() {
+                                        versions.push((java_bin, line.to_string()));
+                                        continue;
+                                    }
+                                }
+                            }
+                            versions.push((full_path.clone(), name.to_string()));
                         }
                     }
                 }
@@ -1442,7 +1486,10 @@ self.state = AppState::StatusView;
                 Language::English => "No Java versions detected",
             }.to_string()
         } else {
-            versions.join("\n")
+            versions.iter()
+                .map(|(path, ver)| format!("{} - {}", ver, path))
+                .collect::<Vec<_>>()
+                .join("\n")
         };
         let info_para = Paragraph::new(info)
             .block(Block::default().title(

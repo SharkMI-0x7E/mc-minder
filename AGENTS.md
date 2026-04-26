@@ -7,7 +7,7 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.4.9 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.5.0 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能
@@ -367,6 +367,7 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 - [ ] 不要写太长的 commit message，保持在 50 字符以内
 
 ## 更新日志
+- 2026-04-26: **v0.5.0 发布!** 彻底移除 LLM/AI 功能，完善初始化配置（Java 自动检测、JDK 路径配置），增强 TUI Java 菜单（版本检测、安装指引）
 - 2026-04-25: **v0.4.9 发布!** AI 聊天机器人重大重写：ChatCapture trait 统一捕获、PooledRconSender 持久连接、ForegroundProcess TUI 内前台运行、[Not Secure] regex 修复、[AI] 日志前缀标准化
 - 2026-04-21: **v0.3.14 发布!** 修复编译错误、clippy 警告、代码质量优化
 - 2026-04-21: **v0.3.13 发布!** 修复 AI 聊天无响应问题、改进日志解析、增强 debug 日志

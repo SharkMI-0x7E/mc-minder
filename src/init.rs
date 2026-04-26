@@ -1,14 +1,78 @@
 use anyhow::Result;
 use colored::Colorize;
-use dialoguer::{Input, Confirm};
+use dialoguer::Input;
 
 use std::fs;
 use std::path::PathBuf;
 use super::config::Config;
 
+/// Detect Java installation and return version info
+fn detect_java() -> Option<(String, String)> {
+    // Try "java" first
+    if let Ok(output) = std::process::Command::new("java")
+        .arg("-version")
+        .output()
+    {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let combined = format!("{} {}", stdout, stderr);
+        
+        // Extract version string
+        for line in combined.lines() {
+            if line.contains("version") {
+                let version = line.trim().to_string();
+                return Some(("java".to_string(), version));
+            }
+        }
+        return Some(("java".to_string(), "unknown version".to_string()));
+    }
+    
+    None
+}
+
+/// Check if running in Termux
+fn is_termux() -> bool {
+    std::env::var("TERMUX_VERSION").is_ok()
+        || std::path::Path::new("/data/data/com.termux").exists()
+}
+
 pub async fn run_init() -> Result<()> {
     println!("{}", "MC-Minder Initialization".green().bold());
     println!("This will help you set up MC-Minder for your Minecraft server.\n");
+
+    // === Java Detection ===
+    println!("{}", "Checking Java installation...".cyan());
+    let java_info = detect_java();
+    
+    let jdk_path = if let Some((_cmd, version)) = &java_info {
+        println!("{} Java found: {}", "✓".green(), version);
+        String::new() // Use system default
+    } else {
+        println!("{}", "✗ Java not found".red());
+        
+        if is_termux() {
+            println!("\n{}", "Termux detected. You can install Java with:".yellow());
+            println!("  pkg install openjdk-17");
+            println!("  pkg install ecj");
+        } else {
+            println!("\n{}", "Please install Java 17+ for your system:".yellow());
+            println!("  Ubuntu/Debian: sudo apt install openjdk-17-jre");
+            println!("  Fedora: sudo dnf install java-17-openjdk");
+            println!("  Arch: sudo pacman -S jre17-openjdk");
+        }
+        
+        let custom_jdk: String = Input::new()
+            .with_prompt("Custom JDK path (leave empty to use system default after installing)")
+            .default(String::new())
+            .interact()?;
+        
+        custom_jdk
+    };
+
+    // === RCON Configuration ===
+    println!("\n{}", "RCON Configuration".cyan().bold());
+    println!("RCON is required for MC-Minder to communicate with your Minecraft server.");
+    println!("Make sure you have set enable-rcon=true in server.properties\n");
 
     let rcon_password: String = Input::new()
         .with_prompt("RCON password (from server.properties)")
@@ -19,35 +83,7 @@ pub async fn run_init() -> Result<()> {
         println!("{}", "Warning: RCON password is empty. Please set it in server.properties first.".yellow());
     }
 
-    let use_ai = Confirm::new()
-        .with_prompt("Enable AI chat features?")
-        .default(false)
-        .interact()?;
-
-    let (api_url, api_key, use_ollama) = if use_ai {
-        let use_ollama = Confirm::new()
-            .with_prompt("Use local Ollama instead of OpenAI-compatible API?")
-            .default(false)
-            .interact()?;
-
-        if use_ollama {
-            (String::new(), String::new(), true)
-        } else {
-            let api_url: String = Input::new()
-                .with_prompt("AI API URL (e.g., https://api.openai.com/v1/chat/completions)")
-                .default("https://api.openai.com/v1/chat/completions".to_string())
-                .interact()?;
-
-            let api_key: String = Input::new()
-                .with_prompt("API Key")
-                .interact()?;
-
-            (api_url, api_key, false)
-        }
-    } else {
-        (String::new(), String::new(), false)
-    };
-
+    // === Server Memory ===
     let min_mem: String = Input::new()
         .with_prompt("Minimum memory for Minecraft server")
         .default("512M".to_string())
@@ -58,20 +94,33 @@ pub async fn run_init() -> Result<()> {
         .default("1G".to_string())
         .interact()?;
 
+    // === Session Name ===
     let session_name: String = Input::new()
         .with_prompt("tmux session name")
         .default("mc_server".to_string())
         .interact()?;
 
+    // === Server Jar ===
+    let jar: String = Input::new()
+        .with_prompt("Server jar filename")
+        .default("fabric-server.jar".to_string())
+        .interact()?;
+
+    // === JVM Flags ===
+    let jvm_flags: String = Input::new()
+        .with_prompt("Extra JVM flags (optional)")
+        .default(String::new())
+        .interact()?;
+
+    // Generate config
     let config_content = generate_config_content(
         &rcon_password,
-        &api_url,
-        &api_key,
-        use_ai && !use_ollama,
-        use_ai && use_ollama,
         &min_mem,
         &max_mem,
         &session_name,
+        &jar,
+        &jvm_flags,
+        &jdk_path,
     );
 
     let config_path = PathBuf::from(super::banner::DEFAULT_CONFIG_PATH);
@@ -87,8 +136,11 @@ pub async fn run_init() -> Result<()> {
     println!("     enable-rcon=true");
     println!("     rcon.port=25575");
     println!("     rcon.password=<your_password>");
-    println!("  2. Place fabric-server.jar in the current directory");
-    println!("  3. Run: ./start-tui.sh");
+    println!("  2. Place {} in the current directory", jar);
+    if java_info.is_none() {
+        println!("  3. Install Java (see instructions above)");
+    }
+    println!("  4. Run: ./start-tui.sh");
 
     Ok(())
 }
@@ -96,42 +148,27 @@ pub async fn run_init() -> Result<()> {
 #[allow(clippy::too_many_arguments)]
 pub fn generate_config_content(
     rcon_password: &str,
-    api_url: &str,
-    api_key: &str,
-    enable_ai: bool,
-    enable_ollama: bool,
     min_mem: &str,
     max_mem: &str,
     session_name: &str,
+    jar: &str,
+    jvm_flags: &str,
+    jdk_path: &str,
 ) -> String {
-    let ai_section = if enable_ai {
+    let jvm_section = if jdk_path.is_empty() && jvm_flags.is_empty() {
+        String::from(
+r#"[jvm]
+gc = "G1GC"
+extra_flags = ""
+# jdk_path = "/usr/lib/jvm/java-17-openjdk/bin/java"
+"#)
+    } else {
         format!(
-r#"[ai]
-api_url = "{}"
-api_key = "{}"
-model = "gpt-3.5-turbo"
-trigger = "!"
-max_tokens = 150
-temperature = 0.7
-"#, api_url, api_key)
-    } else {
-        String::new()
-    };
-
-    let ollama_section = if enable_ollama {
-        String::from(
-r#"[ollama]
-enabled = true
-url = "http://localhost:11434/api/generate"
-model = "qwen:0.5b"
-"#)
-    } else {
-        String::from(
-r#"[ollama]
-enabled = false
-url = "http://localhost:11434/api/generate"
-model = "qwen:0.5b"
-"#)
+r#"[jvm]
+gc = "G1GC"
+extra_flags = "{}"
+jdk_path = "{}"
+"#, jvm_flags, jdk_path)
     };
 
     format!(
@@ -141,7 +178,7 @@ r#"# MC-Minder Configuration File
 # Server Configuration
 # 服务器配置
 [server]
-jar = "fabric-server.jar"
+jar = "{}"
 min_mem = "{}"
 max_mem = "{}"
 session_name = "{}"
@@ -155,7 +192,7 @@ port = 25575
 password = "{}"
 
 {}
-{}
+
 # Backup Configuration
 # 备份配置
 [backup]
@@ -169,7 +206,7 @@ retain_days = 7
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
-"#, min_mem, max_mem, session_name, rcon_password, ai_section, ollama_section)
+"#, jar, min_mem, max_mem, session_name, rcon_password, jvm_section)
 }
 
 pub fn generate_config(path: &PathBuf) -> Result<()> {
@@ -180,12 +217,10 @@ pub fn generate_config(path: &PathBuf) -> Result<()> {
 }
 
 pub fn generate_start_script() -> Result<()> {
-    // Write start-tui.sh - now a simple launcher for mc-minder tui
     let script = include_str!("../scripts/start-tui.sh");
     let script_path = PathBuf::from("start-tui.sh");
     fs::write(&script_path, script)?;
 
-    // Set permissions (unix only)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -234,6 +269,8 @@ pub fn get_config_value(path: &PathBuf, key: &str) -> Result<()> {
         "backup.backup_dest" => config.backup.backup_dest.clone(),
         "backup.retain_days" => config.backup.retain_days.to_string(),
         "jvm.jdk_path" => config.jvm.jdk_path.clone().unwrap_or_default(),
+        "jvm.gc" => config.jvm.gc.clone(),
+        "jvm.extra_flags" => config.jvm.extra_flags.clone(),
         _ => {
             anyhow::bail!("Unknown config key: {}", key);
         }

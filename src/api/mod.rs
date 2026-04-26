@@ -6,14 +6,12 @@ use tokio::sync::RwLock;
 use warp::Filter;
 use serde::{Serialize, Deserialize};
 
-use crate::context::ContextManager;
 use crate::command_sender::MultiCommandSender;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub status: String,
     pub uptime: u64,
-    pub context_messages: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,7 +27,6 @@ pub struct CommandResponse {
 
 pub struct HttpApi {
     port: u16,
-    context: Arc<ContextManager>,
     sender: Arc<RwLock<MultiCommandSender>>,
     start_time: std::time::Instant,
 }
@@ -37,12 +34,10 @@ pub struct HttpApi {
 impl HttpApi {
     pub fn new(
         port: u16,
-        context: Arc<ContextManager>,
         sender: Arc<RwLock<MultiCommandSender>>,
     ) -> Self {
         Self {
             port,
-            context,
             sender,
             start_time: std::time::Instant::now(),
         }
@@ -52,7 +47,6 @@ impl HttpApi {
     where
         S: Future<Output = ()> + Send + 'static,
     {
-        let context = self.context.clone();
         let start_time = self.start_time;
         let port = self.port;
 
@@ -62,17 +56,8 @@ impl HttpApi {
                 let response = StatusResponse {
                     status: "running".to_string(),
                     uptime: start_time.elapsed().as_secs(),
-                    context_messages: context.len(),
                 };
                 warp::reply::json(&response)
-            });
-
-        let context = self.context.clone();
-        let history_route = warp::path("history")
-            .and(warp::get())
-            .map(move || {
-                let messages = context.get_messages();
-                warp::reply::json(&messages)
             });
 
         let sender = self.sender.clone();
@@ -103,7 +88,6 @@ impl HttpApi {
             });
 
         let routes = status_route
-            .or(history_route)
             .or(command_route)
             .with(warp::cors().allow_any_origin());
 
