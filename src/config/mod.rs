@@ -153,7 +153,35 @@ impl Config {
     }
 
     pub fn generate_template() -> String {
-        let s = "# MC-Minder Configuration File\n[jvm]\ngc = \"G1GC\"\nextra_flags = \"\"\njdk_path = \"\"  # Optional: Custom JDK path\n# xmx = \"2G\"  # Uncomment to override server.max_mem\n# xms = \"512M\"  # Uncomment to override server.min_mem\n";
+        let s = r#"# MC-Minder Configuration File
+
+[server]
+jar = "fabric-server.jar"
+min_mem = "512M"
+max_mem = "1G"
+session_name = "mc_server"
+log_file = "logs/latest.log"
+
+[rcon]
+host = "127.0.0.1"
+port = 25575
+password = ""
+
+[backup]
+world_dir = "world"
+backup_dest = "../backups"
+retain_days = 7
+
+[notification]
+telegram_bot_token = ""
+telegram_chat_id = ""
+termux_notify = true
+
+[jvm]
+gc = "G1GC"
+extra_flags = ""
+# jdk_path = "/usr/lib/jvm/java-17-openjdk/bin/java"
+"#;
         s.to_string()
     }
 }

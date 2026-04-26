@@ -1132,36 +1132,70 @@ self.state = AppState::StatusView;
             return;
         }
 
-        // If only one version, just show info
+        // If only system default, show info
         if versions.len() == 1 {
             let (path, version) = &versions[0];
             self.message = Some((
                 if matches!(self.language, Language::Chinese) {
-                    format!("当前 Java:\n{}\n{}", version, path)
+                    format!("当前 Java:\n{}\n{}\n\n如需切换到其他版本，请先在系统中安装", version, path)
                 } else {
-                    format!("Current Java:\n{}\n{}", version, path)
+                    format!("Current Java:\n{}\n{}\n\nInstall other versions first to switch", version, path)
                 },
                 MessageType::Info,
             ));
             return;
         }
 
-        // Multiple versions - show list
-        let list: Vec<String> = versions.iter()
-            .enumerate()
-            .map(|(i, (path, ver))| format!("{}. {} - {}", i + 1, ver, path))
-            .collect();
+        // Multiple versions: find the first non-default one and switch to it
+        let system_default = "system default (java)";
+        let switch_target = versions.iter().find(|(p, _)| !p.contains(system_default));
 
-        let header = if matches!(self.language, Language::Chinese) {
-            "检测到多个 Java 版本:\n"
+        if let Some((target_path, target_ver)) = switch_target {
+            // Update config
+            let jdk_path = if target_path.ends_with("/java") || target_path.ends_with("\\java") || target_path == "java" {
+                // It's a full path to java binary, store it
+                target_path.to_string()
+            } else {
+                // It's a directory, append /bin/java
+                format!("{}/bin/java", target_path)
+            };
+
+            // Save to config
+            if let Some(ref mut cfg) = self.config {
+                cfg.jvm.jdk_path = Some(jdk_path.clone());
+
+                // Write updated config to file
+                let config_content = crate::init::generate_config_content(
+                    &cfg.rcon.password,
+                    &cfg.server.min_mem,
+                    &cfg.server.max_mem,
+                    &cfg.server.session_name,
+                    &cfg.server.jar,
+                    &cfg.jvm.extra_flags,
+                    &jdk_path,
+                );
+                let _ = std::fs::write(&self.config_path, &config_content);
+            }
+
+            self.message = Some((
+                if matches!(self.language, Language::Chinese) {
+                    format!("已切换到 Java:\n{}\n{}", target_ver, jdk_path)
+                } else {
+                    format!("Switched to Java:\n{}\n{}", target_ver, jdk_path)
+                },
+                MessageType::Success,
+            ));
         } else {
-            "Multiple Java versions detected:\n"
-        };
-
-        self.message = Some((
-            format!("{}{}", header, list.join("\n")),
-            MessageType::Info,
-        ));
+            // Only system default found
+            self.message = Some((
+                if matches!(self.language, Language::Chinese) {
+                    "仅检测到系统默认 Java，无需切换".to_string()
+                } else {
+                    "Only system default Java found, no switch needed".to_string()
+                },
+                MessageType::Info,
+            ));
+        }
     }
 
     fn install_java_version(&mut self) {
@@ -1215,7 +1249,20 @@ self.state = AppState::StatusView;
     fn detect_java_versions(&self) -> Vec<(String, String)> {
         let mut versions = Vec::new();
 
-        // Check java command
+        // Helper: try get version from a java binary path
+        let add_version = |versions: &mut Vec<(String, String)>, path: &str| {
+            if versions.iter().any(|(p, _)| p == path) {
+                return;
+            }
+            if let Ok(out) = std::process::Command::new(path).arg("-version").output() {
+                let ver = String::from_utf8_lossy(&out.stderr);
+                if let Some(line) = ver.lines().next() {
+                    versions.push((path.to_string(), line.to_string()));
+                }
+            }
+        };
+
+        // 1. Check system default java
         if let Ok(out) = std::process::Command::new("java").arg("-version").output() {
             let ver = String::from_utf8_lossy(&out.stderr);
             if let Some(line) = ver.lines().next() {
@@ -1223,48 +1270,88 @@ self.state = AppState::StatusView;
             }
         }
 
-        // Check custom JDK path from config
-        if let Some(ref cfg) = self.config {
-            if let Some(ref jdk) = cfg.jvm.jdk_path {
-                if !jdk.is_empty() {
-                    let cmd = std::process::Command::new(jdk)
-                        .arg("-version")
-                        .output();
-                    if let Ok(out) = cmd {
-                        let ver = String::from_utf8_lossy(&out.stderr);
-                        if let Some(line) = ver.lines().next() {
-                            versions.push((jdk.clone(), line.to_string()));
-                        }
+        // 2. Search PATH for all java binaries (which -a / where)
+        let which_cmd = if cfg!(target_os = "windows") {
+            std::process::Command::new("where").arg("java").output()
+        } else {
+            std::process::Command::new("which").args(["-a", "java"]).output()
+        };
+        if let Ok(out) = which_cmd {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                let line = line.trim();
+                if !line.is_empty() && line != "java" && !line.contains("no java") {
+                    add_version(&mut versions, line);
+                }
+            }
+        }
+
+        // 3. Check update-alternatives (Linux)
+        if cfg!(target_os = "linux") {
+            if let Ok(out) = std::process::Command::new("update-alternatives")
+                .args(["--list", "java"])
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() {
+                        add_version(&mut versions, line);
                     }
                 }
             }
         }
 
-        // Check common paths
-        let paths = if cfg!(target_os = "android") {
-            vec!["/data/data/com.termux/files/usr/lib/jvm"]
+        // 4. Check custom JDK path from config
+        if let Some(ref cfg) = self.config {
+            if let Some(ref jdk) = cfg.jvm.jdk_path {
+                if !jdk.is_empty() {
+                    add_version(&mut versions, jdk);
+                }
+            }
+        }
+
+        // 5. Search common installation directories
+        let common_paths = if cfg!(target_os = "android") {
+            vec![
+                "/data/data/com.termux/files/usr/lib/jvm".to_string(),
+                "/data/data/com.termux/files/usr/bin".to_string(),
+            ]
         } else {
-            vec!["/usr/lib/jvm", "/usr/java", "/opt/java"]
+            let mut paths = vec![
+                "/usr/lib/jvm".to_string(),
+                "/usr/java".to_string(),
+                "/opt/java".to_string(),
+                "/opt/jdk".to_string(),
+                "/usr/local/lib/jvm".to_string(),
+                "/snap/openjdk".to_string(),
+            ];
+            if let Ok(jh) = std::env::var("JAVA_HOME") {
+                paths.push(jh);
+            }
+            if let Ok(jh) = std::env::var("JDK_HOME") {
+                paths.push(jh);
+            }
+            paths
         };
 
-        for base in paths {
-            if let Ok(entries) = std::fs::read_dir(base) {
+        for base in common_paths {
+            if let Ok(entries) = std::fs::read_dir(&base) {
                 for entry in entries.flatten() {
                     if let Some(name) = entry.file_name().to_str() {
-                        if name.contains("jdk") || name.contains("jre") || name.contains("openjdk") {
-                            let full_path = format!("{}/{}", base, name);
-                            // Try to get version from this path
-                            let java_bin = format!("{}/bin/java", full_path);
-                            if std::path::Path::new(&java_bin).exists() {
-                                if let Ok(out) = std::process::Command::new(&java_bin).arg("-version").output() {
-                                    let ver = String::from_utf8_lossy(&out.stderr);
-                                    if let Some(line) = ver.lines().next() {
-                                        versions.push((java_bin, line.to_string()));
-                                        continue;
-                                    }
-                                }
+                        if name.contains("jdk") || name.contains("jre") || name.contains("openjdk") || name.contains("java") {
+                            let full_path = entry.path();
+                            let java_bin = full_path.join("bin").join("java");
+                            if java_bin.exists() {
+                                add_version(&mut versions, java_bin.to_str().unwrap_or(""));
+                            } else if full_path.join("java").exists() {
+                                add_version(&mut versions, full_path.join("java").to_str().unwrap_or(""));
+                            } else {
+                                versions.push((
+                                    full_path.to_string_lossy().to_string(),
+                                    name.to_string(),
+                                ));
                             }
-                            versions.push((full_path.clone(), name.to_string()));
                         }
                     }
                 }
