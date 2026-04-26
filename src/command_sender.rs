@@ -10,6 +10,7 @@ use tokio::time::{timeout, Duration};
 // ============================================================
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub enum CommandSenderMode {
     Rcon { host: String, port: u16, password: String },
     PooledRcon { host: String, port: u16, password: String },
@@ -20,6 +21,7 @@ pub struct CommandSender {
     mode: CommandSenderMode,
 }
 
+#[allow(dead_code)]
 impl CommandSender {
     pub fn new(mode: CommandSenderMode) -> Self {
         Self { mode }
@@ -62,6 +64,7 @@ impl CommandSender {
 
     /// Send a command without caring about the response.
     /// Useful for fire-and-forget commands like `say` and `tellraw`.
+    #[allow(dead_code)]
     pub async fn send_command_ignore_response(&mut self, command: &str) -> Result<()> {
         match self.send_command(command).await {
             Ok(_) => Ok(()),
@@ -69,6 +72,7 @@ impl CommandSender {
         }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match &self.mode {
             CommandSenderMode::Rcon { .. } => "RCON",

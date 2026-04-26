@@ -17,6 +17,7 @@ use parking_lot::Mutex;
 pub struct ChatMessage {
     pub player: String,
     pub content: String,
+    #[allow(dead_code)]
     pub timestamp: chrono::DateTime<chrono::Local>,
 }
 
@@ -49,13 +50,6 @@ impl FileId {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum ChatCaptureMode {
-    Tmux { session: String },
-    Process,
-    File,
-}
-
 // ============================================================
 // ChatCapture Trait - Unified interface for chat sources
 // ============================================================
@@ -71,6 +65,7 @@ pub trait ChatCapture: Send {
     fn capture_recent_messages(&mut self) -> Vec<ChatMessage>;
 
     /// Returns the name of this capture implementation for logging.
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
 }
 
@@ -314,10 +309,6 @@ impl TmuxChatCapture {
         })
     }
 
-    pub fn mode(&self) -> ChatCaptureMode {
-        ChatCaptureMode::Tmux { session: self.session.clone() }
-    }
-
     pub fn capture_pane_output(&self) -> Result<String> {
         use std::process::Command;
 
@@ -418,10 +409,6 @@ impl FileChatCapture {
         })
     }
 
-    pub fn mode(&self) -> ChatCaptureMode {
-        ChatCaptureMode::File
-    }
-
     fn hash_line(line: &str) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -479,12 +466,13 @@ impl ChatCapture for FileChatCapture {
 // (Used by ForegroundProcess in TUI mode)
 // ============================================================
 
+#[allow(dead_code)]
 pub struct ProcessChatCapture {
     chat_pattern: Regex,
-    #[allow(dead_code)]
     seen_positions: Arc<Mutex<HashSet<u64>>>,
 }
 
+#[allow(dead_code)]
 impl ProcessChatCapture {
     pub fn new() -> Result<Self> {
         // Handle both vanilla: <Player> message

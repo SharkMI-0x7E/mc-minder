@@ -16,10 +16,11 @@
 ## 功能特性
 
 - **日志监控**：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
-- **AI 聊天机器人**：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发，内置请求限流
-- **RCON 通信**：异步 RCON 协议实现，自动重连，不阻塞事件循环
-- **上下文记忆**：按玩家保存对话历史，自动过期清理
-- **HTTP API**：RESTful API 用于状态查询、历史记录和命令执行
+- **RCON 通信**：持久 RCON 连接池，自动重连，命令响应可见
+- **聊天捕获**：ChatCapture trait 统一接口，支持 Tmux/File/Process 三种模式
+- **前台进程**：TUI 内直接运行 Java 进程，stdio 管道实时捕获
+- **HTTP API**：RESTful API 用于状态查询和命令执行（返回 RCON 响应）
+- **Java 管理**：自动检测 Java 版本，平台专属安装指引，自定义 JDK 路径
 - **一键安装**：交互式初始化，自动检测环境依赖
 - **自动更新**：内置 self-update 命令
 
@@ -38,9 +39,10 @@ curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/in
 ```
 
 这将引导你完成配置：
-1. 设置 RCON 密码
-2. 选择是否启用 AI 功能
+1. Java 自动检测和安装指引
+2. 设置 RCON 密码
 3. 配置服务器内存和会话名称
+4. 自定义 JDK 路径（可选）
 
 ### 启动服务器
 
@@ -119,20 +121,11 @@ host = "127.0.0.1"
 port = 25575
 password = "your_rcon_password"
 
-# AI 配置 - 留空禁用 AI 功能
-[ai]
-api_url = ""
-api_key = ""
-model = "gpt-3.5-turbo"
-trigger = "!"
-max_tokens = 150
-temperature = 0.7
-
-# Ollama 配置 - 设置 enabled = true 使用本地 AI
-[ollama]
-enabled = false
-url = "http://localhost:11434/api/generate"
-model = "qwen:0.5b"
+# JVM 配置
+[jvm]
+gc = "G1GC"
+extra_flags = ""
+# jdk_path = "/usr/lib/jvm/java-17-openjdk/bin/java"  # 可选：自定义 JDK 路径
 
 # 备份配置
 [backup]
@@ -182,8 +175,8 @@ MC-Minder 现在提供原生 Rust TUI，无需 Shell 脚本和 dialog 依赖：
 - **实时控制台视图**：tmux capture-pane 自动刷新服务器输出，支持手动/自动刷新
 - **日志查看**：服务器日志和 MC-Minder 日志，支持滚动
 - **原生更新流程**：TUI 内置异步下载和安装，显示实时进度，无需退出 TUI
-- **Java 管理**：版本检测、切换、安装（Termux）
-- **配置向导**：交互式配置 10 个参数
+- **Java 管理**：版本检测、安装指引（支持 Termux/Linux/macOS）、自定义 JDK 路径
+- **配置向导**：交互式配置服务器参数
 - **语言切换**：中英文即时切换，持久化保存
 - **状态监控**：tmux 会话、mc-minder 进程、看门狗状态
 
@@ -195,35 +188,28 @@ MC-Minder 现在提供原生 Rust TUI，无需 Shell 脚本和 dialog 依赖：
 - r：手动刷新（控制台视图中）
 - a：切换自动刷新（控制台视图中）
 
-### AI 聊天使用
+### Java 管理
 
-玩家在游戏中使用 `!` 前缀触发 AI 响应：
+MC-Minder 提供完整的 Java 管理功能：
 
-```
-!你好
-!help
-!如何制作钻石剑？
-```
+**自动检测**：
+- `init` 命令自动运行 `java -version` 检测
+- TUI Java 菜单扫描系统默认、自定义路径和常见安装目录
 
-**AI 后端**：
-- **OpenAI 兼容 API**：支持任何 OpenAI 格式的 API（如 OpenAI、DeepSeek 等）
-- **Ollama 本地模型**：在配置中设置 `enabled = true` 即可使用本地 AI 模型
-- 自动路由：启用 Ollama 时使用本地模型，否则使用远程 API
+**平台安装指引**：
+- **Termux**：`pkg install openjdk-17`
+- **Linux**：`apt install openjdk-17-jre` / `dnf install java-17-openjdk`
+- **macOS**：`brew install openjdk@17`
 
-**聊天捕获模式**：
-- **Tmux 模式**：通过 tmux capture-pane 捕获服务器聊天输出
-- **文件模式**：直接解析服务器日志文件获取聊天记录
-
-**限流机制**：
-- 同一玩家请求间隔至少 2 秒
-- 最大并发请求数为 3
+**自定义 JDK**：
+- 在 `config.toml` 的 `[jvm]` 部分设置 `jdk_path`
+- TUI 配置向导支持直接编辑 JDK 路径
 
 ## HTTP API
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/status` | GET | 获取服务器状态和运行时间 |
-| `/history` | GET | 获取对话历史 |
 | `/command` | POST | 执行 RCON 命令 |
 
 示例：
@@ -273,7 +259,6 @@ Options:
 - Rust 1.70+（仅编译时需要）
 - Java 17+（用于 Minecraft 服务器）
 - tmux（用于会话管理）
-- 可选：Ollama（用于本地 AI）
 
 ## Windows 换行符问题
 

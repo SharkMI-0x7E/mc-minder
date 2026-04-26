@@ -1,5 +1,6 @@
 // ForegroundProcess - manages a Minecraft server process with piped stdio
 // Used by TUI mode for real-time console view and chat capture
+#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use log::{debug, info, warn};

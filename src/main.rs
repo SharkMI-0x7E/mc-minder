@@ -7,7 +7,6 @@ mod banner;
 
 mod config;
 mod monitor;
-mod rcon;
 mod api;
 mod tui;
 mod update_engine;

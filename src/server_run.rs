@@ -12,6 +12,7 @@ use crate::notification::send_telegram_notification;
 use crate::cli::Args;
 use crate::command_sender::{CommandSender, MultiCommandSender};
 
+#[allow(dead_code)]
 pub enum ServerMode {
     Background,
     Foreground,
@@ -153,6 +154,7 @@ pub async fn run_server_bg(args: Args) -> Result<()> {
     run_server(args, ServerMode::Background).await
 }
 
+#[allow(dead_code)]
 pub async fn run_server_fg(args: Args) -> Result<()> {
     run_server(args, ServerMode::Foreground).await
 }
