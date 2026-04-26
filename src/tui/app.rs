@@ -67,6 +67,7 @@ pub enum AppState {
     StatusView,
     Console,  // Real-time console output
     UpdateView,  // Update progress view
+    #[allow(dead_code)]
     RunningForeground,  // Running foreground server inside TUI
 }
 
@@ -652,6 +653,7 @@ impl App {
     }
 
     /// Poll foreground process for new console output lines (non-blocking)
+    #[allow(dead_code)]
     pub fn poll_foreground_output(&mut self) {
         if let Some(ref mut proc) = self.foreground_process {
             // Collect all available output lines
@@ -679,6 +681,7 @@ impl App {
     }
 
     /// Check if foreground process has exited
+    #[allow(dead_code)]
     pub fn is_foreground_process_alive(&mut self) -> bool {
         if let Some(ref mut proc) = self.foreground_process {
             proc.is_running()
@@ -920,16 +923,16 @@ impl App {
 
         self.message = Some((
             if matches!(self.language, Language::Chinese) {
-                format!("正在启动前台服务器...\n\n命令: java -Xms{} -Xmx{} -jar {} nogui\n\n按 Ctrl+C 停止服务器", min_mem, max_mem, jar)
+                format!("正在退出 TUI 启动前台服务器...\n\n命令: java -Xms{} -Xmx{} -jar {} nogui\n\n按 Ctrl+C 停止服务器", min_mem, max_mem, jar)
             } else {
-                format!("Starting foreground server...\n\nCommand: java -Xms{} -Xmx{} -jar {} nogui\n\nPress Ctrl+C to stop server", min_mem, max_mem, jar)
+                format!("Exiting TUI to start foreground server...\n\nCommand: java -Xms{} -Xmx{} -jar {} nogui\n\nPress Ctrl+C to stop server", min_mem, max_mem, jar)
             },
             MessageType::Info,
         ));
 
-        // Transition to RunningForeground state - actual process spawn happens in poll_foreground
-        self.state = AppState::RunningForeground;
-        self.fg_console_lines = Vec::new();
+        // Exit TUI and exec Java directly in terminal
+        self.foreground_requested = true;
+        self.should_quit = true;
     }
 
     fn stop_server(&mut self) {
