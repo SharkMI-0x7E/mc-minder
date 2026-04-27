@@ -84,7 +84,9 @@ pub enum AppState {
     StatusView,
     Console,  // Real-time console output
     UpdateView,  // Update progress view
+    #[allow(dead_code)]
     RunningForeground,  // Running foreground server inside TUI
+    #[allow(dead_code)]
     Busy(String),  // Processing / loading overlay (P1-5)
     ServerConfigEdit,  // Edit selected server's config (P2-4)
     NewServerWizard,  // Create new server wizard (P3)
@@ -111,6 +113,7 @@ pub enum ConfirmAction {
     UpdateMcminder,
     Exit,
     /// Custom modal dialog with title and message
+    #[allow(dead_code)]
     Modal { title_cn: &'static str, title_en: &'static str, message_cn: &'static str, message_en: &'static str },
 }
 
@@ -961,6 +964,7 @@ impl App {
     }
 
     /// Show a modal info dialog with custom title and message
+    #[allow(dead_code)]
     pub fn show_modal(&mut self, title_cn: &'static str, title_en: &'static str, msg_cn: &'static str, msg_en: &'static str) {
         self.state = AppState::ConfirmDialog(ConfirmAction::Modal {
             title_cn, title_en, message_cn: msg_cn, message_en: msg_en,
@@ -977,11 +981,13 @@ impl App {
     }
 
     /// Set processing/loading state (shows spinner overlay)
+    #[allow(dead_code)]
     pub fn set_busy(&mut self, msg: String) {
         self.state = AppState::Busy(msg);
     }
 
     /// Clear processing state
+    #[allow(dead_code)]
     pub fn clear_busy(&mut self) {
         if matches!(self.state, AppState::Busy(_)) {
             self.state = AppState::MainMenu;

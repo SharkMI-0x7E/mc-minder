@@ -208,6 +208,7 @@ impl Config {
     /// Returns the list of active server instances.
     /// If [[servers]] is configured, returns those.
     /// Otherwise, falls back to the legacy single-server config.
+    #[allow(dead_code)]
     pub fn get_servers(&self) -> Vec<ServerInstance> {
         if !self.servers.is_empty() {
             return self.servers.clone();
@@ -291,6 +292,7 @@ extra_flags = ""
 
 /// A managed Minecraft server instance.
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct ServerInstance {
     /// Display name for this server
     #[serde(default = "default_instance_name")]
