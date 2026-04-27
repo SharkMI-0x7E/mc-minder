@@ -516,7 +516,7 @@ MC 服务器状态查询功能依赖 `mc-status-probe` 库（`https://crates.io/
 
 **Cargo.toml 配置**：
 ```toml
-mc-status-probe = "0.1.0-alpha.2"
+mc-status-probe = "0.1.0-alpha.3"
 ```
 
 如果本地开发需要同时修改 msp，可以临时改为 path 依赖：

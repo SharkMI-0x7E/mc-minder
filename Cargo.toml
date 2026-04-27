@@ -36,7 +36,7 @@ ratatui = "0.28"
 crossterm = "0.28"
 dirs = "5"
 async-trait = "0.1"
-mc-status-probe = { version = "0.1.0-alpha.2", path = "mc-status-probe" }
+mc-status-probe = { version = "0.1.0-alpha.3", path = "mc-status-probe" }
 
 [profile.release]
 opt-level = 3
