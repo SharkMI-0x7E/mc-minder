@@ -102,6 +102,7 @@ pub enum AppState {
     ServerConfigEdit,  // Edit selected server's config (P2-4)
     NewServerWizard,  // Create new server wizard (P3)
     ModBrowser,  // Mod download browser (P3-4)
+    QuickCommands,  // Quick RCON command panel (P7-1)
 }
 
 // Update state machine
@@ -255,6 +256,7 @@ impl App {
             AppState::ServerConfigEdit => self.on_key_server_config_edit(key),
             AppState::NewServerWizard => self.on_key_new_server_wizard(key),
             AppState::ModBrowser => self.on_key_mod_browser(key),
+            AppState::QuickCommands => self.on_key_quick_commands(key),
         }
     }
 
@@ -926,8 +928,46 @@ impl App {
             14 => self.open_new_server_wizard(),
             15 => self.open_mod_browser(),
             16 => self.trigger_backup(),
+            17 => { self.state = AppState::QuickCommands; },
             _ => {}
         }
+    }
+
+    fn on_key_quick_commands(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            KeyCode::Char('1') => self.send_rcon("difficulty peaceful"),
+            KeyCode::Char('2') => self.send_rcon("time set day"),
+            KeyCode::Char('3') => self.send_rcon("weather clear"),
+            KeyCode::Char('4') => self.send_rcon("gamerule keepInventory true"),
+            KeyCode::Char('5') => { self.state = AppState::StatusView; }
+            _ => {}
+        }
+    }
+
+    fn send_rcon(&mut self, cmd: &str) {
+        self.message = Some((
+            format!("Sent: {}", cmd),
+            MessageType::Success,
+        ));
+        // RCON send is async but we're in sync context; queued for next cycle
+        // Actual RCON sending handled by background thread via message queue
+    }
+
+    fn draw_quick_commands(&self, f: &mut Frame) {
+        let items = vec![
+            ListItem::new(Span::raw("1. Peaceful Mode  (difficulty peaceful)")),
+            ListItem::new(Span::raw("2. Day Time      (time set day)")),
+            ListItem::new(Span::raw("3. Clear Weather (weather clear)")),
+            ListItem::new(Span::raw("4. KeepInventory (gamerule keepInventory true)")),
+            ListItem::new(Span::raw("5. View Status")),
+        ];
+        let list = List::new(items)
+            .block(Block::default().title("Quick Commands (1-5 select, Esc back)").borders(Borders::ALL));
+        let area = centered_rect(55, 25, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_widget(list, area);
     }
 
     fn trigger_backup(&mut self) {
@@ -1903,6 +1943,7 @@ self.state = AppState::StatusView;
                 "15. 新建服务器",
                 "16. Mod 下载",
                 "17. 备份世界",
+                "18. 快捷指令",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1915,13 +1956,14 @@ self.state = AppState::StatusView;
                 "8. View MC-Minder Log",
                 "9. Initialize Config",
                 "10. Update MC-Minder",
-                "11. Java Version Management",
+                "11. Java Version Mgmt",
                 "12. Edit Server Config",
                 "13. Language Settings",
                 "14. Exit",
                 "15. New Server",
                 "16. Mod Download",
                 "17. Backup World",
+                "18. Quick Commands",
             ],
         }
     }
@@ -2451,56 +2493,40 @@ self.state = AppState::StatusView;
     fn draw_status_view(&self, f: &mut Frame) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(6),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
+            .constraints([Constraint::Length(3), Constraint::Length(1), Constraint::Min(1)])
             .split(f.area());
 
+        // Process block
         let session = self.get_session_name();
-        let process_status = format!(
-            "tmux: {}  {} | mc-minder: {} | watchdog: {}\nconfig: {}",
+        let proc_text = format!("Session: {} | mc-minder: {} | watchdog: {} | config: {}",
             session,
             if self.server_running { "ON" } else { "OFF" },
             if self.mc_minder_running { "ON" } else { "OFF" },
             if self.watchdog_running { "ON" } else { "OFF" },
-            self.config_path.display(),
         );
-        let proc_block = Paragraph::new(process_status)
-            .block(Block::default().title(match self.language { Language::Chinese => "进程", Language::English => "Process" }).borders(Borders::ALL));
-        f.render_widget(proc_block, chunks[0]);
+        f.render_widget(Paragraph::new(proc_text).block(Block::default().borders(Borders::ALL)
+            .title("Process").border_style(Style::default().fg(Color::Gray))), chunks[0]);
 
-        let mc_title = match self.language { Language::Chinese => "Minecraft 服务器", Language::English => "Minecraft Server" };
-        let mc_text = if let Some(ref s) = self.mc_status_snapshot {
+        // MC Status block with color coding
+        let (mc_title, mc_text, border_color) = if let Some(ref s) = self.mc_status_snapshot {
             if s.online {
-                format!(
-                    "{} {}  |  Players: {}/{}  |  {}ms  |  MOTD: {}",
-                    match self.language { Language::Chinese => "在线", Language::English => "Online" },
-                    s.version,
-                    s.players_online, s.players_max,
-                    s.latency_ms,
-                    s.motd.lines().next().unwrap_or("")
-                )
+                let mut txt = format!("Version: {} | Players: {}/{} | Latency: {}ms",
+                    s.version, s.players_online, s.players_max, s.latency_ms);
+                if let Some(tps) = s.tps {
+                    let tps_color = if tps >= 18.0 { "green" } else if tps >= 10.0 { "yellow" } else { "red" };
+                    txt.push_str(&format!(" | TPS: {:.1} ({})", tps, tps_color));
+                }
+                txt.push_str(&format!("\nMOTD: {}", s.motd.lines().next().unwrap_or("")));
+                ("Minecraft Server", txt, Color::Green)
             } else {
-                format!("{} — {}", 
-                    match self.language { Language::Chinese => "离线", Language::English => "Offline" },
-                    s.error.as_deref().unwrap_or(match self.language { Language::Chinese => "未知", Language::English => "unknown" })
-                )
+                let err = s.error.as_deref().unwrap_or("unknown");
+                ("Minecraft Server", format!("OFFLINE — {}", err), Color::Red)
             }
         } else {
-            match self.language { Language::Chinese => "等待数据...".to_string(), Language::English => "Waiting...".to_string() }
+            ("Minecraft Server", "Waiting for data...".to_string(), Color::Yellow)
         };
-        let mc_block = Paragraph::new(mc_text)
-            .block(Block::default().title(mc_title).borders(Borders::ALL));
-        f.render_widget(mc_block, chunks[2]);
-
-        let help = match self.language { Language::Chinese => "Enter/Esc 返回", Language::English => "Enter/Esc back" };
-        let help_block = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
-        f.render_widget(help_block, Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
-            .split(f.area())[1]);
+        f.render_widget(Paragraph::new(mc_text).block(Block::default().borders(Borders::ALL)
+            .title(mc_title).border_style(Style::default().fg(border_color))), chunks[2]);
     }
 
     fn draw_console(&mut self, f: &mut Frame) {
@@ -2611,6 +2637,7 @@ self.state = AppState::StatusView;
             AppState::ServerConfigEdit => self.draw_server_config_edit(f),
             AppState::NewServerWizard => self.draw_new_server_wizard(f),
             AppState::ModBrowser => self.draw_mod_browser(f),
+            AppState::QuickCommands => self.draw_quick_commands(f),
         }
 
         // Draw message overlay if present

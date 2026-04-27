@@ -1,6 +1,6 @@
 [package]
 name = "mc-minder"
-version = "0.6.0-alpha.12"
+version = "0.6.0-alpha.13"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A smart management suite for Minecraft servers(fabric) on Linux/Termux/Android"
