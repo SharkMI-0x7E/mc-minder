@@ -1,11 +1,13 @@
 [package]
 name = "mc-status-probe"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A zero-dependency Minecraft Java server status probe based on wiki.vg Server List Ping protocol"
 license = "MIT"
-repository = "https://github.com/SharkMI-0x7E/mc-minder"
+repository = "https://github.com/SharkMI-0x7E/mc-status-probe"
+documentation = "https://docs.rs/mc-status-probe"
+readme = "README.md"
 keywords = ["minecraft", "server", "status", "ping", "protocol"]
 categories = ["network-programming", "game-development"]
 

@@ -30,7 +30,24 @@ async fn main() {
 }
 ```
 
-## How It Works
+## Protocol Version Reference
+
+| Minecraft Version | Protocol Version |
+|-------------------|-----------------|
+| 1.21.11 | 774 |
+| 1.21.5 | 767 |
+| 1.21 / 1.21.1 | 767 |
+| 1.20.5 / 1.20.6 | 766 |
+| 1.20.2 / 1.20.4 | 765 |
+| 1.19.4 | 762 |
+| 1.19.3 | 761 |
+| 1.19.1 / 1.19.2 | 760 |
+| 1.19 | 759 |
+| 1.18.2 | 758 |
+
+Full list: <https://wiki.vg/Protocol_version_numbers>
+
+## License
 
 1. Opens a TCP connection to the Minecraft server
 2. Sends a Handshake packet (protocol version + server address + "status" next state)
