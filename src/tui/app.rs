@@ -424,6 +424,8 @@ impl App {
                 notification: crate::config::NotificationConfig::default(),
                 jvm: crate::config::JvmConfig::default(),
                 mc_status: crate::config::McStatusConfig::default(),
+                schedules: Vec::new(),
+                watchdog: crate::config::WatchdogConfig::default(),
             }
         };
 

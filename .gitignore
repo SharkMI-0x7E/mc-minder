@@ -33,3 +33,4 @@ target/
 
 # mc-status-probe is in its own repo
 mc-status-probe/
+.sisyphus/

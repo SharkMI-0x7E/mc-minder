@@ -81,6 +81,88 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
         }
     });
 
+    // Schedule runner (P4-3): periodic backup/broadcast/restart
+    if !config.schedules.is_empty() {
+        let schedules = config.schedules.clone();
+        let schedule_sender = rcon_sender.clone();
+        let mut sched_shutdown = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            loop {
+                for entry in &schedules {
+                    let wait = Duration::from_secs(entry.interval_mins * 60);
+                    tokio::select! {
+                        _ = tokio::time::sleep(wait) => {
+                            let mut sender = schedule_sender.write().await;
+                            match entry.action.as_str() {
+                                "broadcast" => {
+                                    let _ = sender.send_command(&format!("say {}", entry.message)).await;
+                                    info!("[Scheduler] Broadcast: {}", entry.message);
+                                }
+                                "restart" => {
+                                    let _ = sender.send_command("say Server restarting...").await;
+                                    let _ = sender.send_command("stop").await;
+                                    info!("[Scheduler] Server shutdown initiated");
+                                }
+                                "command" => {
+                                    let _ = sender.send_command(&entry.message).await;
+                                    info!("[Scheduler] Command: {}", entry.message);
+                                }
+                                _ => warn!("[Scheduler] Unknown action: {}", entry.action),
+                            }
+                        }
+                        _ = sched_shutdown.recv() => {
+                            log::info!("Scheduler shutting down");
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Watchdog (P4-1): health check + auto-restart
+    if config.watchdog.enabled {
+        let wd_config = config.watchdog.clone();
+        let wd_sender = rcon_sender.clone();
+        let mut wd_shutdown = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            let mut restarts = 0u32;
+            loop {
+                let check = Duration::from_secs(wd_config.check_interval_secs);
+                tokio::select! {
+                    _ = tokio::time::sleep(check) => {
+                        // Health check via RCON "list" command
+                        let mut sender = wd_sender.write().await;
+                        match sender.send_command("list").await {
+                            Ok(_) => {
+                                restarts = 0; // Server is alive, reset counter
+                            }
+                            Err(e) => {
+                                warn!("[Watchdog] Health check failed: {}", e);
+                                restarts += 1;
+                                if wd_config.max_restarts > 0 && restarts > wd_config.max_restarts {
+                                    warn!("[Watchdog] Max restarts ({}) reached, giving up", wd_config.max_restarts);
+                                    break;
+                                }
+                                // Wait cooldown, then try restart
+                                tokio::time::sleep(Duration::from_secs(wd_config.cooldown_secs)).await;
+                                // Reconnect sender
+                                let mut sender2 = wd_sender.write().await;
+                                let _ = sender2.send_command("stop").await;
+                                info!("[Watchdog] Auto-restart triggered (attempt {}/{})", restarts,
+                                    if wd_config.max_restarts == 0 { "unlimited" } else { "" });
+                            }
+                        }
+                    }
+                    _ = wd_shutdown.recv() => {
+                        log::info!("Watchdog shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     let mut shutdown_rx = shutdown_tx.subscribe();
     let http_handle = tokio::spawn(async move {
         if let Err(e) = http_api.start(async move { shutdown_rx.recv().await.ok(); }).await {

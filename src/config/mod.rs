@@ -3,6 +3,36 @@ use std::path::PathBuf;
 use anyhow::{Result, Context};
 // use log::warn;
 
+// Pre-declared types for Config struct
+#[derive(Debug, Deserialize, Clone)]
+pub struct ScheduleEntry {
+    pub interval_mins: u64,
+    pub action: String,
+    #[serde(default)]
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct WatchdogConfig {
+    #[serde(default = "default_watchdog_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_watchdog_max_restarts")]
+    pub max_restarts: u32,
+    #[serde(default = "default_watchdog_cooldown")]
+    pub cooldown_secs: u64,
+    #[serde(default = "default_watchdog_check_interval")]
+    pub check_interval_secs: u64,
+}
+fn default_watchdog_enabled() -> bool { false }
+fn default_watchdog_max_restarts() -> u32 { 5 }
+fn default_watchdog_cooldown() -> u64 { 30 }
+fn default_watchdog_check_interval() -> u64 { 60 }
+impl Default for WatchdogConfig {
+    fn default() -> Self {
+        Self { enabled: false, max_restarts: 5, cooldown_secs: 30, check_interval_secs: 60 }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -20,6 +50,10 @@ pub struct Config {
     pub jvm: JvmConfig,
     #[serde(default)]
     pub mc_status: McStatusConfig,
+    #[serde(default)]
+    pub schedules: Vec<ScheduleEntry>,
+    #[serde(default)]
+    pub watchdog: WatchdogConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
