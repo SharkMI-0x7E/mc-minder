@@ -73,8 +73,8 @@ pub enum AppState {
     StatusView,
     Console,  // Real-time console output
     UpdateView,  // Update progress view
-    #[allow(dead_code)]
     RunningForeground,  // Running foreground server inside TUI
+    Busy(String),  // Processing / loading overlay (P1-5)
 }
 
 // Update state machine
@@ -173,15 +173,27 @@ impl App {
         // Global shortcuts (work in most states)
         use crossterm::event::KeyCode;
         match key.code {
-            KeyCode::Char('c') if !matches!(self.state, AppState::Console | AppState::ConfigWizard | AppState::RunningForeground) => {
+            KeyCode::Char('c') if !matches!(self.state, AppState::Console | AppState::ConfigWizard | AppState::RunningForeground | AppState::Busy(_)) => {
                 self.enter_console();
                 return;
             }
-            KeyCode::F(5) => {
+            KeyCode::F(5) if !matches!(self.state, AppState::Busy(_)) => {
                 self.refresh_status();
                 return;
             }
+            KeyCode::F(7) if !matches!(self.state, AppState::Busy(_)) => {
+                self.message = Some((
+                    match self.language { Language::Chinese => "备份功能将在后续版本上线".to_string(), Language::English => "Backup coming in a future release".to_string() },
+                    MessageType::Info,
+                ));
+                return;
+            }
             _ => {}
+        }
+
+        // Busy state blocks all other input
+        if matches!(self.state, AppState::Busy(_)) {
+            return;
         }
 
         match self.state {
@@ -197,6 +209,7 @@ impl App {
             AppState::Console => self.on_key_console(key),
             AppState::UpdateView => self.on_key_update_view(key),
             AppState::RunningForeground => self.on_key_running_foreground(key),
+            AppState::Busy(_) => {}, // Blocked by guard above
         }
     }
 
@@ -904,6 +917,31 @@ impl App {
             match self.language { Language::Chinese => "状态已刷新".to_string(), Language::English => "Status refreshed".to_string() },
             MessageType::Success,
         ));
+    }
+
+    /// Set processing/loading state (shows spinner overlay)
+    pub fn set_busy(&mut self, msg: String) {
+        self.state = AppState::Busy(msg);
+    }
+
+    /// Clear processing state
+    pub fn clear_busy(&mut self) {
+        if matches!(self.state, AppState::Busy(_)) {
+            self.state = AppState::MainMenu;
+        }
+    }
+
+    fn draw_busy(&self, f: &mut Frame, msg: &str) {
+        let area = centered_rect(40, 10, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        let text = format!("  {}\n\n  {}\n  {}", 
+            msg,
+            match self.language { Language::Chinese => "处理中...", Language::English => "Processing..." },
+            match self.language { Language::Chinese => "请稍候", Language::English => "Please wait" }
+        );
+        let para = Paragraph::new(text)
+            .alignment(ratatui::layout::Alignment::Center);
+        f.render_widget(para, area);
     }
 
     // Server control methods
@@ -2154,20 +2192,33 @@ self.state = AppState::StatusView;
     }
 
     fn status_text(&self) -> String {
-        let lang = match self.language {
-            Language::Chinese => "中文",
-            Language::English => "English",
-        };
+        let mut s = String::new();
+        // MC Server status (from mc-status-probe)
+        if let Some(ref mc) = self.mc_status_snapshot {
+            if mc.online {
+                s.push_str(&format!("MC 服务器: 在线\n  版本: {}\n  玩家: {}/{}\n  延迟: {}ms\n  描述: {}\n\n",
+                    mc.version, mc.players_online, mc.players_max, mc.latency_ms,
+                    mc.motd.lines().next().unwrap_or("")));
+            } else {
+                s.push_str(&format!("MC 服务器: 离线\n  原因: {}\n\n",
+                    mc.error.as_deref().unwrap_or("未知")));
+            }
+        } else {
+            match self.language {
+                Language::Chinese => s.push_str("MC 服务器: 等待数据...\n\n"),
+                Language::English => s.push_str("MC Server: Waiting...\n\n"),
+            }
+        }
+        // Process status
         let session = self.get_session_name();
-        format!(
-            "语言: {}\n配置: {}\n\n服务器:\n  会话: {}\n  状态: {}\n\nMC-Minder:\n  状态: {}\n\n看门狗:\n  状态: {}",
-            lang,
-            self.config_path.display(),
+        s.push_str(&format!(
+            "进程状态:\n  tmux: {} ({})\n  MC-Minder: {}\n  看门狗: {}\n\n快捷: F5=刷新 F7=备份 c=控制台",
             session,
-            if self.server_running { "运行中" } else { "未运行" },
-            if self.mc_minder_running { "运行中" } else { "未运行" },
-            if self.watchdog_running { "运行中" } else { "未运行" },
-        )
+            if self.server_running { "ON" } else { "OFF" },
+            if self.mc_minder_running { "ON" } else { "OFF" },
+            if self.watchdog_running { "ON" } else { "OFF" },
+        ));
+        s
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
@@ -2191,6 +2242,7 @@ self.state = AppState::StatusView;
             AppState::Console => self.draw_console(f),
             AppState::UpdateView => self.draw_update_view(f),
             AppState::RunningForeground => self.draw_running_foreground(f),
+            AppState::Busy(msg) => self.draw_busy(f, msg),
         }
 
         // Draw message overlay if present
