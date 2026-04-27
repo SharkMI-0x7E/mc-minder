@@ -12,6 +12,7 @@ mod tui;
 mod update_engine;
 mod command_sender;
 mod foreground_process;
+mod core_download;
 
 use anyhow::Result;
 use clap::Parser;

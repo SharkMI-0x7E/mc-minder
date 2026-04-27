@@ -60,6 +60,11 @@ pub struct App {
     // Server config edit fields (P2-4)
     pub server_edit_fields: Vec<(String, String)>,
     pub server_edit_index: usize,
+    // New server wizard state (P3)
+    pub wizard_core_types: Vec<crate::core_download::CoreType>,
+    pub wizard_versions: Vec<String>,
+    pub wizard_selected: usize,
+    pub wizard_step: u8, // 0=core type, 1=version, 2=downloading
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -82,6 +87,7 @@ pub enum AppState {
     RunningForeground,  // Running foreground server inside TUI
     Busy(String),  // Processing / loading overlay (P1-5)
     ServerConfigEdit,  // Edit selected server's config (P2-4)
+    NewServerWizard,  // Create new server wizard (P3)
 }
 
 // Update state machine
@@ -171,6 +177,10 @@ impl App {
             selected_server: 0,
             server_edit_fields: Vec::new(),
             server_edit_index: 0,
+            wizard_core_types: crate::core_download::CoreType::all(),
+            wizard_versions: Vec::new(),
+            wizard_selected: 0,
+            wizard_step: 0,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -226,6 +236,7 @@ impl App {
             AppState::RunningForeground => self.on_key_running_foreground(key),
             AppState::Busy(_) => {},
             AppState::ServerConfigEdit => self.on_key_server_config_edit(key),
+            AppState::NewServerWizard => self.on_key_new_server_wizard(key),
         }
     }
 
@@ -891,8 +902,17 @@ impl App {
             13 => {
                 self.state = AppState::ConfirmDialog(ConfirmAction::Exit);
             }
+            14 => self.open_new_server_wizard(),
             _ => {}
         }
+    }
+
+    /// Open the new server creation wizard (P3)
+    fn open_new_server_wizard(&mut self) {
+        self.wizard_step = 0;
+        self.wizard_selected = 0;
+        self.wizard_core_types = crate::core_download::CoreType::all();
+        self.state = AppState::NewServerWizard;
     }
 
     /// Open the per-server config editor (P2-4)
@@ -981,6 +1001,103 @@ impl App {
         f.render_widget(para, area);
     }
 
+    fn on_key_new_server_wizard(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.state = AppState::MainMenu;
+                self.wizard_step = 0;
+            }
+            _ => self.wizard_navigation(key),
+        }
+    }
+
+    fn wizard_navigation(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        let max = match self.wizard_step {
+            0 => self.wizard_core_types.len().saturating_sub(1),
+            1 => self.wizard_versions.len().saturating_sub(1),
+            _ => 0,
+        };
+
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('8') => {
+                self.wizard_selected = self.wizard_selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('2') => {
+                if self.wizard_selected < max { self.wizard_selected += 1; }
+            }
+            KeyCode::Enter => {
+                match self.wizard_step {
+                    0 => {
+                        // Core type selected → fetch versions
+                        self.wizard_step = 1;
+                        self.wizard_selected = 0;
+                        let core_type = self.wizard_core_types[self.wizard_selected].clone();
+                        let rt = tokio::runtime::Handle::current();
+                        self.wizard_versions = match core_type {
+                            crate::core_download::CoreType::Fabric => {
+                                rt.block_on(crate::core_download::fetch_fabric_game_versions())
+                                    .unwrap_or_else(|_| vec!["1.21.1".to_string(), "1.20.1".to_string()])
+                            }
+                            crate::core_download::CoreType::Vanilla => {
+                                rt.block_on(crate::core_download::fetch_vanilla_versions())
+                                    .unwrap_or_else(|_| vec!["1.21.1".to_string(), "1.20.1".to_string()])
+                            }
+                            crate::core_download::CoreType::Paper => {
+                                rt.block_on(crate::core_download::fetch_paper_versions())
+                                    .unwrap_or_else(|_| vec!["1.21".to_string(), "1.20".to_string()])
+                            }
+                        };
+                        // Limit to 20 versions
+                        self.wizard_versions.truncate(20);
+                    }
+                    1 => {
+                        // Version selected → download
+                        let core_type = self.wizard_core_types[0].clone();
+                        let version = self.wizard_versions[self.wizard_selected].clone();
+                        let dir = std::env::current_dir().unwrap_or_default();
+                        let rt = tokio::runtime::Handle::current();
+                        let result = match core_type {
+                            crate::core_download::CoreType::Fabric => {
+                                let loader = rt.block_on(crate::core_download::fetch_fabric_loader(&version))
+                                    .unwrap_or_else(|_| "0.17.2".to_string());
+                                rt.block_on(crate::core_download::download_fabric_server(&version, &loader, &dir))
+                            }
+                            crate::core_download::CoreType::Vanilla => {
+                                rt.block_on(crate::core_download::download_vanilla_server(&version, &dir))
+                            }
+                            crate::core_download::CoreType::Paper => {
+                                rt.block_on(crate::core_download::download_paper_server(&version, &dir))
+                            }
+                        };
+                        match result {
+                            Ok(path) => {
+                                self.message = Some((
+                                    format!("Downloaded: {}", path),
+                                    MessageType::Success,
+                                ));
+                                // Refresh server discovery
+                                let scan_dir = self.config_path.parent().unwrap_or(std::path::Path::new("."));
+                                self.discovered_servers = crate::config::discover_servers(scan_dir);
+                            }
+                            Err(e) => {
+                                self.message = Some((
+                                    format!("Failed: {}", e),
+                                    MessageType::Warning,
+                                ));
+                            }
+                        }
+                        self.state = AppState::MainMenu;
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn on_key_server_config_edit(&mut self, key: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
         match key.code {
@@ -1020,6 +1137,32 @@ impl App {
             .block(Block::default().title(title).borders(Borders::ALL))
             .highlight_style(Style::default().fg(Color::Yellow));
         f.render_stateful_widget(list, f.area(), &mut state);
+    }
+
+    fn draw_new_server_wizard(&self, f: &mut Frame) {
+        let items: Vec<ListItem> = match self.wizard_step {
+            0 => self.wizard_core_types.iter()
+                .map(|ct| ListItem::new(Span::raw(match self.language { Language::Chinese => ct.display_name_cn(), Language::English => ct.display_name() })))
+                .collect(),
+            1 => self.wizard_versions.iter()
+                .map(|v| ListItem::new(Span::raw(v.clone())))
+                .collect(),
+            _ => vec![ListItem::new(Span::raw(match self.language { Language::Chinese => "下载中...", Language::English => "Downloading..." }))],
+        };
+        let mut state = ratatui::widgets::ListState::default();
+        state.select(Some(self.wizard_selected));
+        let title = match self.wizard_step {
+            0 => match self.language { Language::Chinese => "新建服务器 — 选择核心类型 (Enter确认)", Language::English => "New Server — Select Core Type (Enter)" },
+            1 => match self.language { Language::Chinese => "选择 Minecraft 版本", Language::English => "Select Minecraft Version" },
+            _ => match self.language { Language::Chinese => "正在下载...", Language::English => "Downloading..." },
+        };
+        let list = List::new(items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ");
+        let area = centered_rect(55, 30, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_stateful_widget(list, area, &mut state);
     }
 
     // Server control methods
@@ -1635,6 +1778,7 @@ self.state = AppState::StatusView;
                 "12. 编辑服务器配置",
                 "13. 语言设置",
                 "14. 退出",
+                "15. 新建服务器",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1651,6 +1795,7 @@ self.state = AppState::StatusView;
                 "12. Edit Server Config",
                 "13. Language Settings",
                 "14. Exit",
+                "15. New Server",
             ],
         }
     }
@@ -2332,6 +2477,7 @@ self.state = AppState::StatusView;
             AppState::RunningForeground => self.draw_running_foreground(f),
             AppState::Busy(msg) => self.draw_busy(f, msg),
             AppState::ServerConfigEdit => self.draw_server_config_edit(f),
+            AppState::NewServerWizard => self.draw_new_server_wizard(f),
         }
 
         // Draw message overlay if present
