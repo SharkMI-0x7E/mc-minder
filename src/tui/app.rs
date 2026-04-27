@@ -97,6 +97,8 @@ pub enum ConfirmAction {
     RestartServer,
     UpdateMcminder,
     Exit,
+    /// Custom modal dialog with title and message
+    Modal { title_cn: &'static str, title_en: &'static str, message_cn: &'static str, message_en: &'static str },
 }
 
 pub enum Language {
@@ -167,6 +169,21 @@ impl App {
 
     pub fn on_key(&mut self, key: crossterm::event::KeyEvent) {
         let key = Self::normalize_key(key);
+
+        // Global shortcuts (work in most states)
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Char('c') if !matches!(self.state, AppState::Console | AppState::ConfigWizard | AppState::RunningForeground) => {
+                self.enter_console();
+                return;
+            }
+            KeyCode::F(5) => {
+                self.refresh_status();
+                return;
+            }
+            _ => {}
+        }
+
         match self.state {
             AppState::MainMenu => self.on_key_main_menu(key),
             AppState::JavaMenu => self.on_key_java_menu(key),
@@ -848,13 +865,13 @@ impl App {
     }
 
     fn execute_confirm_action(&mut self) {
-        // Store action before changing state
         let action = match &self.state {
             AppState::ConfirmDialog(a) => match a {
                 ConfirmAction::StopServer => Some("stop"),
                 ConfirmAction::RestartServer => Some("restart"),
                 ConfirmAction::UpdateMcminder => Some("update"),
                 ConfirmAction::Exit => Some("exit"),
+                ConfirmAction::Modal { .. } => Some("modal"),
             },
             _ => None,
         };
@@ -867,9 +884,26 @@ impl App {
                 "restart" => self.restart_server(),
                 "update" => self.update_mcminder(),
                 "exit" => self.should_quit = true,
+                "modal" => {}, // Modal just closes on OK
                 _ => {}
             }
         }
+    }
+
+    /// Show a modal info dialog with custom title and message
+    pub fn show_modal(&mut self, title_cn: &'static str, title_en: &'static str, msg_cn: &'static str, msg_en: &'static str) {
+        self.state = AppState::ConfirmDialog(ConfirmAction::Modal {
+            title_cn, title_en, message_cn: msg_cn, message_en: msg_en,
+        });
+    }
+
+    /// Refresh server status display
+    fn refresh_status(&mut self) {
+        self.show_server_status();
+        self.message = Some((
+            match self.language { Language::Chinese => "状态已刷新".to_string(), Language::English => "Status refreshed".to_string() },
+            MessageType::Success,
+        ));
     }
 
     // Server control methods
@@ -2004,6 +2038,10 @@ self.state = AppState::StatusView;
                     Language::Chinese => "确定要退出吗？\n\n按 Y 确认，按 N 取消",
                     Language::English => "Are you sure you want to exit?\n\nPress Y to confirm, N to cancel",
                 },
+            ),
+            ConfirmAction::Modal { title_cn, title_en, message_cn, message_en } => (
+                if matches!(self.language, Language::Chinese) { *title_cn } else { *title_en },
+                if matches!(self.language, Language::Chinese) { *message_cn } else { *message_en },
             ),
         };
 
