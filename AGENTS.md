@@ -586,6 +586,8 @@ feat(tui): add interactive Java version picker
 feat: add Java switch, fix foreground mode, update README, bump version
 ```
 
+**每组 commit 的 subject 只描述一件事**。Release 页面每行对应一个 commit 的 subject，commit link 可以相同（同一个 commit 的多行 body 不会出现在 Release 描述中）。
+
 ---
 
 ### 用户个人要求

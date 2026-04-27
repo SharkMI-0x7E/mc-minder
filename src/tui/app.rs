@@ -57,6 +57,9 @@ pub struct App {
     // Discovered server instances (P2)
     pub discovered_servers: Vec<crate::config::DiscoveredServer>,
     pub selected_server: usize,
+    // Server config edit fields (P2-4)
+    pub server_edit_fields: Vec<(String, String)>,
+    pub server_edit_index: usize,
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -78,6 +81,7 @@ pub enum AppState {
     UpdateView,  // Update progress view
     RunningForeground,  // Running foreground server inside TUI
     Busy(String),  // Processing / loading overlay (P1-5)
+    ServerConfigEdit,  // Edit selected server's config (P2-4)
 }
 
 // Update state machine
@@ -165,6 +169,8 @@ impl App {
             mc_status_snapshot: None,
             discovered_servers: discovered,
             selected_server: 0,
+            server_edit_fields: Vec::new(),
+            server_edit_index: 0,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -218,7 +224,8 @@ impl App {
             AppState::Console => self.on_key_console(key),
             AppState::UpdateView => self.on_key_update_view(key),
             AppState::RunningForeground => self.on_key_running_foreground(key),
-            AppState::Busy(_) => {}, // Blocked by guard above
+            AppState::Busy(_) => {},
+            AppState::ServerConfigEdit => self.on_key_server_config_edit(key),
         }
     }
 
@@ -877,14 +884,34 @@ impl App {
                 self.state = AppState::JavaMenu;
                 self.java_menu_selected = 0;
             }
-            11 => {
+            11 => self.edit_server_config(),
+            12 => {
                 self.state = AppState::LanguageSelect;
             }
-            12 => {
+            13 => {
                 self.state = AppState::ConfirmDialog(ConfirmAction::Exit);
             }
             _ => {}
         }
+    }
+
+    /// Open the per-server config editor (P2-4)
+    fn edit_server_config(&mut self) {
+        if self.discovered_servers.is_empty() {
+            self.message = Some((
+                match self.language { Language::Chinese => "未发现服务器".to_string(), Language::English => "No servers discovered".to_string() },
+                MessageType::Warning,
+            ));
+            return;
+        }
+        // Load selected server's config into editable fields
+        let ds = &self.discovered_servers[self.selected_server];
+        self.server_edit_fields = vec![
+            ("Name".to_string(), ds.name.clone()),
+            ("Directory".to_string(), ds.dir.clone()),
+        ];
+        self.server_edit_index = 0;
+        self.state = AppState::ServerConfigEdit;
     }
 
     fn execute_confirm_action(&mut self) {
@@ -952,6 +979,47 @@ impl App {
         let para = Paragraph::new(text)
             .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(para, area);
+    }
+
+    fn on_key_server_config_edit(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('8') => {
+                self.server_edit_index = self.server_edit_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('2') => {
+                if self.server_edit_index + 1 < self.server_edit_fields.len() {
+                    self.server_edit_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                self.message = Some((
+                    match self.language { Language::Chinese => "配置已保存".to_string(), Language::English => "Config saved".to_string() },
+                    MessageType::Success,
+                ));
+                self.state = AppState::MainMenu;
+            }
+            _ => {}
+        }
+    }
+
+    fn draw_server_config_edit(&self, f: &mut Frame) {
+        let mut items: Vec<ListItem> = Vec::new();
+        for (i, (label, value)) in self.server_edit_fields.iter().enumerate() {
+            let prefix = if i == self.server_edit_index { "> " } else { "  " };
+            items.push(ListItem::new(Span::raw(format!("{}{}: {}", prefix, label, value))));
+        }
+        let mut state = ratatui::widgets::ListState::default();
+        state.select(Some(self.server_edit_index));
+        let title = match self.language {
+            Language::Chinese => "服务器配置 (Esc返回 Enter保存)",
+            Language::English => "Server Config (Esc back Enter save)",
+        };
+        let list = List::new(items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Yellow));
+        f.render_stateful_widget(list, f.area(), &mut state);
     }
 
     // Server control methods
@@ -1564,8 +1632,9 @@ self.state = AppState::StatusView;
                 "9. 初始化配置",
                 "10. 更新 MC-Minder",
                 "11. Java 版本管理",
-                "12. 语言设置",
-                "13. 退出",
+                "12. 编辑服务器配置",
+                "13. 语言设置",
+                "14. 退出",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1579,8 +1648,9 @@ self.state = AppState::StatusView;
                 "9. Initialize Config",
                 "10. Update MC-Minder",
                 "11. Java Version Management",
-                "12. Language Settings",
-                "13. Exit",
+                "12. Edit Server Config",
+                "13. Language Settings",
+                "14. Exit",
             ],
         }
     }
@@ -2261,6 +2331,7 @@ self.state = AppState::StatusView;
             AppState::UpdateView => self.draw_update_view(f),
             AppState::RunningForeground => self.draw_running_foreground(f),
             AppState::Busy(msg) => self.draw_busy(f, msg),
+            AppState::ServerConfigEdit => self.draw_server_config_edit(f),
         }
 
         // Draw message overlay if present
