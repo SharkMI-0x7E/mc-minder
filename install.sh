@@ -28,10 +28,8 @@ detect_arch() {
     case "$os" in
         Linux)
             if [ -n "$TERMUX_VERSION" ]; then
-                # Termux/Android - use Bionic-linked binary
                 echo "termux-aarch64"
             elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
-                # Native ARM64 Linux (e.g. Raspberry Pi)
                 echo "aarch64-linux"
             elif [ "$arch" = "x86_64" ]; then
                 echo "x86_64-linux"
@@ -39,6 +37,9 @@ detect_arch() {
                 echo "unknown"
             fi
             ;;
+        MINGW*|MSYS*|CYGWIN*)
+            echo "x86_64-windows"
+            ;;    
         Darwin)
             log_error "macOS is NOT supported for pre-built binaries"
             echo ""
@@ -227,7 +228,9 @@ main() {
         log_error "Unsupported platform: $(uname -s) $(uname -m)"
         log_info "Supported platforms:"
         log_info "  - Linux x86_64"
+        log_info "  - Linux aarch64"
         log_info "  - Termux/Android ARM64"
+        log_info "  - Windows x86_64 (Git Bash / MSYS2)"
         echo ""
         log_info "Please compile from source: https://github.com/$REPO"
         exit 1

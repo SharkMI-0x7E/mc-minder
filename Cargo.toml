@@ -1,6 +1,6 @@
 [package]
 name = "mc-minder"
-version = "0.5.7"
+version = "0.6.0-alpha.1"
 edition = "2021"
 authors = ["SharkMI-0x7E"]
 description = "A smart management suite for Minecraft servers(fabric) on Linux/Termux/Android"
@@ -36,6 +36,7 @@ ratatui = "0.28"
 crossterm = "0.28"
 dirs = "5"
 async-trait = "0.1"
+mc-status-probe = { path = "mc-status-probe" }
 
 [profile.release]
 opt-level = 3

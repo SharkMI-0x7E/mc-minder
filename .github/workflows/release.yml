@@ -132,8 +132,50 @@ jobs:
           name: mc-minder-aarch64-linux
           path: mc-minder-aarch64-linux
 
+  build-windows-x86_64:
+    name: Build Windows x86_64 (Mingw)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-windows-cargo-
+
+      - name: Install cross via binstall
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y cross
+
+      - name: Build for Windows Mingw
+        run: cross build --target x86_64-pc-windows-gnu --release
+
+      - name: Rename binary
+        run: |
+          mv target/x86_64-pc-windows-gnu/release/mc-minder.exe mc-minder-x86_64-windows.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-minder-x86_64-windows
+          path: mc-minder-x86_64-windows.exe
+
   release:
-    needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64]
+    needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64, build-windows-x86_64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -279,6 +321,7 @@ jobs:
             | Linux x64 | `mc-minder-x86_64-linux` | 适用于桌面 Linux / WSL |
             | Linux ARM64 | `mc-minder-aarch64-linux` | 适用于树莓派 / ARM 服务器 |
             | Termux/Android ARM64 | `mc-minder-termux-aarch64` | 适用于手机 Termux 环境 |
+            | Windows x64 | `mc-minder-x86_64-windows.exe` | 适用于 Windows 64位 |
             
             ### 安装
             
@@ -289,6 +332,7 @@ jobs:
             binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux
             binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64
             binaries/mc-minder-aarch64-linux/mc-minder-aarch64-linux
+            binaries/mc-minder-x86_64-windows/mc-minder-x86_64-windows.exe
             install.sh
           draft: false
           prerelease: false

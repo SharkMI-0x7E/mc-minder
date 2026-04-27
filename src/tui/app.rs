@@ -49,6 +49,8 @@ pub struct App {
     pub foreground_process: Option<ForegroundProcess>,
     pub fg_console_lines: Vec<String>,
     pub fg_server_alive: bool,  // Cached is_running state
+    // MC status cache shared with API layer
+    pub mc_status_cache: Option<std::sync::Arc<tokio::sync::RwLock<Option<(crate::api::McStatusSnapshot, std::time::Instant)>>>>,
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -147,6 +149,7 @@ impl App {
             foreground_process: None,
             fg_console_lines: Vec::new(),
             fg_server_alive: false,
+            mc_status_cache: None,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -325,6 +328,7 @@ impl App {
                 backup: crate::config::BackupConfig::default(),
                 notification: crate::config::NotificationConfig::default(),
                 jvm: crate::config::JvmConfig::default(),
+                mc_status: crate::config::McStatusConfig::default(),
             }
         };
 

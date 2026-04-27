@@ -15,6 +15,8 @@ pub struct Config {
     #[serde(default)]
     #[allow(dead_code)]
     pub jvm: JvmConfig,
+    #[serde(default)]
+    pub mc_status: McStatusConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -130,6 +132,51 @@ pub struct JvmConfig {
 }
 
 fn default_gc() -> String { "G1GC".to_string() }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct McStatusConfig {
+    #[serde(default = "default_ping_interval")]
+    pub ping_interval_secs: u64,
+    #[serde(default = "default_ping_timeout")]
+    pub ping_timeout_secs: u64,
+}
+
+fn default_ping_interval() -> u64 { 60 }
+fn default_ping_timeout() -> u64 { 3 }
+
+impl Default for McStatusConfig {
+    fn default() -> Self {
+        Self {
+            ping_interval_secs: default_ping_interval(),
+            ping_timeout_secs: default_ping_timeout(),
+        }
+    }
+}
+
+/// Discover the Minecraft server port from server.properties.
+/// Falls back to 25565 if the file is missing or unreadable.
+pub fn discover_minecraft_port(server_dir: &std::path::Path) -> (u16, Option<String>) {
+    let props_path = server_dir.join("server.properties");
+    match std::fs::read_to_string(&props_path) {
+        Ok(content) => {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.starts_with('#') || line.is_empty() {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    if key.trim() == "server-port" || key.trim() == "query.port" {
+                        if let Ok(port) = value.trim().parse::<u16>() {
+                            return (port, None);
+                        }
+                    }
+                }
+            }
+            (25565, Some("server.properties found but no server-port defined, using default 25565".to_string()))
+        }
+        Err(_) => (25565, Some("server.properties not found, using default port 25565".to_string())),
+    }
+}
 
 impl Default for JvmConfig {
     fn default() -> Self {

@@ -44,10 +44,36 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
 
     let rcon_sender = Arc::new(RwLock::new(command_sender));
 
+    // Discover Minecraft server port
+    let (mc_port, port_warning) = crate::config::discover_minecraft_port(
+        &config_path.parent().unwrap_or(std::path::Path::new("."))
+    );
+    if let Some(w) = port_warning {
+        warn!("{}", w);
+    }
+
+    // Check if RCON is properly configured
+    let rcon_available = !config.rcon.password.is_empty();
+
     let http_api = Arc::new(HttpApi::new(
         args.http_port,
         rcon_sender.clone(),
+        rcon_available,
+        mc_port,
+        config.mc_status.clone(),
     ));
+
+    // Clone cache BEFORE moving http_api into spawn
+    let mc_status_cache = http_api.mc_status_cache.clone();
+    let mc_poll_interval = Duration::from_secs(config.mc_status.ping_interval_secs);
+    let poll_api = http_api.clone();
+    tokio::spawn(async move {
+        loop {
+            let _ = poll_api.fetch_mc_status().await;
+            tokio::time::sleep(mc_poll_interval).await;
+        }
+    });
+
     let mut shutdown_rx = shutdown_tx.subscribe();
     let http_handle = tokio::spawn(async move {
         if let Err(e) = http_api.start(async move { shutdown_rx.recv().await.ok(); }).await {

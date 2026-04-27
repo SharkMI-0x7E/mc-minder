@@ -183,6 +183,7 @@ min_mem = "{}"
 max_mem = "{}"
 session_name = "{}"
 log_file = "logs/latest.log"
+server_type = "fabric"
 
 # RCON Configuration
 # RCON 配置
@@ -206,6 +207,12 @@ retain_days = 7
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
+
+# MC Status Probe Configuration
+# MC 状态查询配置
+[mc_status]
+ping_interval_secs = 60
+ping_timeout_secs = 3
 "#, jar, min_mem, max_mem, session_name, rcon_password, jvm_section)
 }
 
