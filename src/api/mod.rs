@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{info, warn};
+use log::info;
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -64,7 +64,7 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
     ));
 
     // Clone cache BEFORE moving http_api into spawn
-    let mc_status_cache = http_api.mc_status_cache.clone();
+    let _mc_status_cache = http_api.mc_status_cache.clone();
     let mc_poll_interval = Duration::from_secs(config.mc_status.ping_interval_secs);
     let poll_api = http_api.clone();
     tokio::spawn(async move {

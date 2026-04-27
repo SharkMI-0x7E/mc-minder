@@ -44,6 +44,15 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
         // Poll for input
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
+                // Skip key Release events on Windows to avoid double-processing
+                // (Windows terminals send both Press and Release)
+                if key.kind == crossterm::event::KeyEventKind::Release {
+                    continue;
+                }
+                // Also skip Repeat events for the same reason
+                if key.kind == crossterm::event::KeyEventKind::Repeat {
+                    continue;
+                }
                 let had_message = app.message.is_some();
                 app.on_key(key);
                 if app.message.is_some() && !had_message {

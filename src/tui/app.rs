@@ -50,6 +50,7 @@ pub struct App {
     pub fg_console_lines: Vec<String>,
     pub fg_server_alive: bool,  // Cached is_running state
     // MC status cache shared with API layer
+    #[allow(dead_code)]
     pub mc_status_cache: Option<std::sync::Arc<tokio::sync::RwLock<Option<(crate::api::McStatusSnapshot, std::time::Instant)>>>>,
     // Update engine state
     #[allow(dead_code)]
@@ -156,7 +157,34 @@ impl App {
         }
     }
 
+    /// Normalize key codes for cross-platform compatibility.
+    /// On some Windows terminals, numpad keys send Char events
+    /// instead of Up/Down/Left/Right/Enter when NumLock is on.
+    fn normalize_key(key: crossterm::event::KeyEvent) -> crossterm::event::KeyEvent {
+        use crossterm::event::KeyCode;
+        // Only remap when no explicit modifiers (Shift/Ctrl/Alt) are pressed
+        if !key.modifiers.is_empty() {
+            return key;
+        }
+        let code = match key.code {
+            // Numpad arrow keys (NumLock on) → arrow keys
+            KeyCode::Char('8') => KeyCode::Up,
+            KeyCode::Char('2') => KeyCode::Down,
+            KeyCode::Char('4') => KeyCode::Left,
+            KeyCode::Char('6') => KeyCode::Right,
+            // All other keys unchanged
+            other => other,
+        };
+        crossterm::event::KeyEvent {
+            code,
+            modifiers: key.modifiers,
+            kind: key.kind,
+            state: key.state,
+        }
+    }
+
     pub fn on_key(&mut self, key: crossterm::event::KeyEvent) {
+        let key = Self::normalize_key(key);
         match self.state {
             AppState::MainMenu => self.on_key_main_menu(key),
             AppState::JavaMenu => self.on_key_java_menu(key),

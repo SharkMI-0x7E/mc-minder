@@ -608,3 +608,41 @@ feat: add Java switch, fix foreground mode, update README, bump version
     ```
 - 安装完成后建议执行健康检查：`bunx oh-my-opencode doctor`。
 - 如需更多自定义参数，请查看脚本内帮助信息。 
+
+---
+
+## Windows 开发注意事项
+
+### Python 命令
+- Python 命令使用 `py` 而不是 `python`（环境变量问题）
+- PowerShell 中使用 `;` 分隔命令，而不是 `&&`
+
+### Windows TUI 按键处理（重要！）
+
+Windows 终端（cmd / PowerShell / Windows Terminal）与 Linux 终端在按键事件上有以下区别：
+
+1. **Press/Release 双事件**：Windows 终端每次按键会发送 `KeyEventKind::Press` 和 `KeyEventKind::Release` 两个事件。代码中已在 `tui/mod.rs` 过滤掉 Release 事件，避免状态被重复处理。
+
+2. **小键盘按键**：当 NumLock 开启时，小键盘方向键发送 `KeyCode::Char('8')`（上）、`Char('2')`（下）、`Char('4')`（左）、`Char('6')`（右），而非 `KeyCode::Up/Down/Left/Right`。代码中已在 `app.rs` 的 `normalize_key()` 中做了映射。
+
+3. **新增按键处理时**：必须在 `normalize_key()` 中处理 Windows 特有的按键映射。
+
+### Windows 后台启动不可用
+
+`start_server_background()` 依赖 `tmux` 和 `nohup`，这些是 Unix 专有命令。在 Windows 上后台启动会静默失败。
+未来可考虑使用 Windows 的 `start /B` 或 `CreateProcess` 作为替代方案。
+
+### 代码风格
+- 代码中**不**使用 emoji
+- 终端输出保持简洁，不要大量使用 `=` 等分隔符
+- 回复用户时可以使用 emoji，但代码保持专业
+
+### mc-status-probe (msp) 依赖管理
+
+msp 是独立的 Rust 库，有独立仓库 `https://github.com/SharkMI-0x7E/mc-status-probe` 和 crates.io 版本。
+
+**关键规则**：
+- msp 更新版本后，mc-minder 的 `Cargo.toml` 中 `mc-status-probe` 版本号**必须同步更新**
+- msp 的源代码**不需要**放在 mc-minder 仓库中（已在 .gitignore 排除）
+- 本地开发如需同时修改 msp，使用双源依赖：`mc-status-probe = { version = "0.1.0-alpha.3", path = "mc-status-probe" }`
+- 发布 mc-minder 前，确保 msp 已发布到 crates.io
