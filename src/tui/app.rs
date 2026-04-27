@@ -426,6 +426,7 @@ impl App {
                 mc_status: crate::config::McStatusConfig::default(),
                 schedules: Vec::new(),
                 watchdog: crate::config::WatchdogConfig::default(),
+                lazy_start: crate::config::LazyStartConfig::default(),
             }
         };
 

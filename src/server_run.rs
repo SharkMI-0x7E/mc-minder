@@ -163,6 +163,25 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
         });
     }
 
+    // Lazy Start (P4-2): TCP listener that auto-starts server on connect
+    if config.lazy_start.enabled {
+        let ls_settings = crate::lazy_start::LazyStartSettings {
+            enabled: true,
+            listen_port: config.lazy_start.listen_port,
+            idle_timeout_mins: config.lazy_start.idle_timeout_mins,
+            jar: config.server.jar.clone(),
+            min_mem: config.server.min_mem.clone(),
+            max_mem: config.server.max_mem.clone(),
+            jdk_path: config.jvm.jdk_path.clone(),
+        };
+        let ls_sender = rcon_sender.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::lazy_start::run_lazy_start(ls_settings, ls_sender).await {
+                log::error!("[LazyStart] Fatal error: {}", e);
+            }
+        });
+    }
+
     let mut shutdown_rx = shutdown_tx.subscribe();
     let http_handle = tokio::spawn(async move {
         if let Err(e) = http_api.start(async move { shutdown_rx.recv().await.ok(); }).await {

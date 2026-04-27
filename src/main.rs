@@ -13,6 +13,7 @@ mod update_engine;
 mod command_sender;
 mod foreground_process;
 mod core_download;
+mod lazy_start;
 
 use anyhow::Result;
 use clap::Parser;

@@ -34,6 +34,24 @@ impl Default for WatchdogConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct LazyStartConfig {
+    #[serde(default = "default_lazy_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_lazy_port")]
+    pub listen_port: u16,
+    #[serde(default = "default_lazy_idle")]
+    pub idle_timeout_mins: u64,
+}
+fn default_lazy_enabled() -> bool { false }
+fn default_lazy_port() -> u16 { 25565 }
+fn default_lazy_idle() -> u64 { 10 }
+impl Default for LazyStartConfig {
+    fn default() -> Self {
+        Self { enabled: false, listen_port: 25565, idle_timeout_mins: 10 }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
     pub servers: Vec<ServerInstance>,
@@ -54,6 +72,8 @@ pub struct Config {
     pub schedules: Vec<ScheduleEntry>,
     #[serde(default)]
     pub watchdog: WatchdogConfig,
+    #[serde(default)]
+    pub lazy_start: LazyStartConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
