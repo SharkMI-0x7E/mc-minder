@@ -30,6 +30,13 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
             if let Ok(guard) = cache.try_read() {
                 if let Some((ref snapshot, _)) = *guard {
                     app.mc_status_snapshot = Some(snapshot.clone());
+                    // Record TPS history for chart (P6-2)
+                    if let Some(tps) = snapshot.tps {
+                        app.tps_history.push_back(tps);
+                        if app.tps_history.len() > 30 {
+                            app.tps_history.pop_front();
+                        }
+                    }
                 }
             }
         }

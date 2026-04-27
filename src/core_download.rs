@@ -409,6 +409,26 @@ fn urlencoding(s: &str) -> String {
         .replace('#', "%23")
 }
 
+// ============================================================
+// Local mod scanner (P3-5)
+// ============================================================
+
+/// Scan the mods/ folder and return a list of installed mod jars.
+pub fn scan_installed_mods(mods_dir: &Path) -> Vec<String> {
+    let mut mods = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(mods_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".jar") {
+                mods.push(name);
+            }
+        }
+    }
+    mods.sort();
+    mods
+}
+
+
 
 async fn download_to_file(url: &str, output_dir: &Path, filename: &str) -> Result<String> {
     let output_path = output_dir.join(filename);

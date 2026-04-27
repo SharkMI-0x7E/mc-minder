@@ -18,6 +18,7 @@ enum MenuEntry {
 use crate::config::Config;
 use crate::update_engine::{UpdateEngine, UpdateMsg};
 use crate::foreground_process::{ForegroundProcess, ProcessOutput};
+use std::collections::VecDeque;
 
 // Small helper struct for configuration wizard fields
 #[derive(Clone)]
@@ -74,6 +75,7 @@ pub struct App {
     pub wizard_selected: usize,
     pub wizard_step: u8, // 0=core type, 1=version, 2=downloading
     pub java_cache: Vec<(String, String)>,  // cached Java versions
+    pub tps_history: std::collections::VecDeque<f64>,  // P6-2 TPS history
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -104,6 +106,7 @@ pub enum AppState {
     ModBrowser,  // Mod download browser (P3-4)
     QuickCommands,  // Quick RCON command panel (P7-1)
     BackupList,  // Backup list viewer (P5-3)
+    ModList,  // Installed mods list (P3-5)
 }
 
 // Update state machine
@@ -199,6 +202,7 @@ impl App {
             wizard_selected: 0,
             wizard_step: 0,
             java_cache: Vec::new(),
+            tps_history: std::collections::VecDeque::new(),
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -259,6 +263,7 @@ impl App {
             AppState::ModBrowser => self.on_key_mod_browser(key),
             AppState::QuickCommands => self.on_key_quick_commands(key),
             AppState::BackupList => self.on_key_backup_list(key),
+            AppState::ModList => self.on_key_mod_list(key),
         }
     }
 
@@ -932,6 +937,7 @@ impl App {
             16 => self.trigger_backup(),
             17 => { self.state = AppState::QuickCommands; },
             18 => { self.state = AppState::BackupList; },
+            19 => { self.state = AppState::ModList; },
             _ => {}
         }
     }
@@ -963,6 +969,28 @@ impl App {
         }
         let list = List::new(items).block(Block::default().title("Backups (Esc back)").borders(Borders::ALL));
         let area = centered_rect(55, 25, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_widget(list, area);
+    }
+
+    fn on_key_mod_list(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            _ => {}
+        }
+    }
+
+    fn draw_mod_list(&self, f: &mut Frame) {
+        let mods_dir = std::path::Path::new("mods");
+        let mods = crate::core_download::scan_installed_mods(mods_dir);
+        let items: Vec<ListItem> = if mods.is_empty() {
+            vec![ListItem::new(Span::raw("No mods installed (create mods/ folder and add .jar files)"))]
+        } else {
+            mods.iter().map(|m| ListItem::new(Span::raw(m.clone()))).collect()
+        };
+        let list = List::new(items).block(Block::default().title("Installed Mods (Esc back)").borders(Borders::ALL));
+        let area = centered_rect(55, 30, f.area());
         f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
         f.render_widget(list, area);
     }
@@ -2008,6 +2036,7 @@ self.state = AppState::StatusView;
                 "17. 备份世界",
                 "18. 快捷指令",
                 "19. 备份列表",
+                "20. 已安装 Mods",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -2556,16 +2585,21 @@ self.state = AppState::StatusView;
     }
 
     fn draw_status_view(&self, f: &mut Frame) {
+        let has_tps = !self.tps_history.is_empty();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Length(1), Constraint::Min(1)])
+            .constraints([
+                Constraint::Length(2),
+                Constraint::Length(if has_tps { 3 } else { 2 }),
+                Constraint::Length(if has_tps { 6 } else { 0 }),
+                Constraint::Min(1),
+            ])
             .split(f.area());
 
         // Process block
         let session = self.get_session_name();
-        let proc_text = format!("Session: {} | mc-minder: {} | watchdog: {} | config: {}",
+        let proc_text = format!("Session: {} | MC-Minder: {} | Watchdog: {}",
             session,
-            if self.server_running { "ON" } else { "OFF" },
             if self.mc_minder_running { "ON" } else { "OFF" },
             if self.watchdog_running { "ON" } else { "OFF" },
         );
@@ -2578,8 +2612,7 @@ self.state = AppState::StatusView;
                 let mut txt = format!("Version: {} | Players: {}/{} | Latency: {}ms",
                     s.version, s.players_online, s.players_max, s.latency_ms);
                 if let Some(tps) = s.tps {
-                    let tps_color = if tps >= 18.0 { "green" } else if tps >= 10.0 { "yellow" } else { "red" };
-                    txt.push_str(&format!(" | TPS: {:.1} ({})", tps, tps_color));
+                    txt.push_str(&format!(" | TPS: {:.1}", tps));
                 }
                 txt.push_str(&format!("\nMOTD: {}", s.motd.lines().next().unwrap_or("")));
                 ("Minecraft Server", txt, Color::Green)
@@ -2591,7 +2624,35 @@ self.state = AppState::StatusView;
             ("Minecraft Server", "Waiting for data...".to_string(), Color::Yellow)
         };
         f.render_widget(Paragraph::new(mc_text).block(Block::default().borders(Borders::ALL)
-            .title(mc_title).border_style(Style::default().fg(border_color))), chunks[2]);
+            .title(mc_title).border_style(Style::default().fg(border_color))), chunks[1]);
+
+        // TPS history chart (P6-2)
+        if has_tps {
+            let chart_lines: Vec<String> = vec![
+                self.tps_chart_line(20.0, "20"),
+                self.tps_chart_line(19.5, ""),
+                self.tps_chart_line(18.0, "18"),
+                self.tps_chart_line(15.0, ""),
+                self.tps_chart_line(10.0, "10"),
+                self.tps_chart_line(5.0, ""),
+            ];
+            let chart_text = chart_lines.join("\n");
+            f.render_widget(Paragraph::new(chart_text).block(Block::default().borders(Borders::ALL)
+                .title("TPS History (last 30 readings)")), chunks[2]);
+        }
+    }
+
+    fn tps_chart_line(&self, threshold: f64, label: &str) -> String {
+        let mut line = String::from(if label.is_empty() { "   " } else { &format!("{:>2} ", label) });
+        for &tps in &self.tps_history {
+            if tps >= threshold {
+                let bar = if tps >= 18.0 { "█" } else if tps >= 10.0 { "▓" } else { "░" };
+                line.push_str(bar);
+            } else {
+                line.push(' ');
+            }
+        }
+        line
     }
 
     fn draw_console(&mut self, f: &mut Frame) {
@@ -2704,6 +2765,7 @@ self.state = AppState::StatusView;
             AppState::ModBrowser => self.draw_mod_browser(f),
             AppState::QuickCommands => self.draw_quick_commands(f),
             AppState::BackupList => self.draw_backup_list(f),
+            AppState::ModList => self.draw_mod_list(f),
         }
 
         // Draw message overlay if present
