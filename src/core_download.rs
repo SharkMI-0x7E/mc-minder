@@ -293,6 +293,20 @@ pub async fn download_paper_server(
 }
 
 // ============================================================
+// EULA helper (P3-6)
+// ============================================================
+
+/// Create eula.txt agreeing to Minecraft EULA.
+pub fn create_eula(dir: &Path) -> Result<()> {
+    let eula_path = dir.join("eula.txt");
+    if !eula_path.exists() {
+        std::fs::write(&eula_path, "eula=true\n")?;
+        info!("[CoreDownload] Created eula.txt");
+    }
+    Ok(())
+}
+
+// ============================================================
 // Modrinth API (Mod platform integration)
 // ============================================================
 

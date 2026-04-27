@@ -103,6 +103,7 @@ pub enum AppState {
     NewServerWizard,  // Create new server wizard (P3)
     ModBrowser,  // Mod download browser (P3-4)
     QuickCommands,  // Quick RCON command panel (P7-1)
+    BackupList,  // Backup list viewer (P5-3)
 }
 
 // Update state machine
@@ -257,6 +258,7 @@ impl App {
             AppState::NewServerWizard => self.on_key_new_server_wizard(key),
             AppState::ModBrowser => self.on_key_mod_browser(key),
             AppState::QuickCommands => self.on_key_quick_commands(key),
+            AppState::BackupList => self.on_key_backup_list(key),
         }
     }
 
@@ -929,8 +931,67 @@ impl App {
             15 => self.open_mod_browser(),
             16 => self.trigger_backup(),
             17 => { self.state = AppState::QuickCommands; },
+            18 => { self.state = AppState::BackupList; },
             _ => {}
         }
+    }
+
+    fn on_key_backup_list(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            _ => {}
+        }
+    }
+
+    fn draw_backup_list(&self, f: &mut Frame) {
+        let mut items: Vec<ListItem> = Vec::new();
+        if let Some(ref cfg) = self.config {
+            let dest = std::path::PathBuf::from(&cfg.backup.backup_dest);
+            if let Ok(backups) = crate::backup::list_backups(&dest) {
+                if backups.is_empty() {
+                    items.push(ListItem::new(Span::raw("No backups found")));
+                } else {
+                    for b in &backups {
+                        let size_mb = b.size / 1024 / 1024;
+                        items.push(ListItem::new(Span::raw(format!("{}  ({}MB)", b.name, size_mb))));
+                    }
+                }
+            } else {
+                items.push(ListItem::new(Span::raw("Backup directory not found")));
+            }
+        }
+        let list = List::new(items).block(Block::default().title("Backups (Esc back)").borders(Borders::ALL));
+        let area = centered_rect(55, 25, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_widget(list, area);
+    }
+
+    // P7-2: Crash report scanner
+    fn scan_crash_reports(&self) -> Vec<String> {
+        let mut reports = Vec::new();
+        let path = std::path::Path::new("crash-reports");
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.ends_with(".txt") || name.contains("crash") {
+                    if let Ok(meta) = entry.metadata() {
+                        let size_kb = meta.len() / 1024;
+                        reports.push(format!("{} ({}KB)", name, size_kb));
+                    }
+                }
+            }
+        }
+        reports.sort_by(|a, b| b.cmp(a)); // newest first by filename
+        reports
+    }
+
+    // P7-3: Announcement with countdown
+    fn announce_countdown(&mut self, minutes: u32) {
+        self.message = Some((
+            format!("Announcement: server restarting in {} min", minutes),
+            MessageType::Info,
+        ));
     }
 
     fn on_key_quick_commands(&mut self, key: crossterm::event::KeyEvent) {
@@ -1169,6 +1230,8 @@ impl App {
                         };
                         match result {
                             Ok(path) => {
+                                // Auto-create eula.txt (P3-6)
+                                let _ = crate::core_download::create_eula(&dir);
                                 self.message = Some((
                                     format!("Downloaded: {}", path),
                                     MessageType::Success,
@@ -1944,6 +2007,7 @@ self.state = AppState::StatusView;
                 "16. Mod 下载",
                 "17. 备份世界",
                 "18. 快捷指令",
+                "19. 备份列表",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1964,6 +2028,7 @@ self.state = AppState::StatusView;
                 "16. Mod Download",
                 "17. Backup World",
                 "18. Quick Commands",
+                "19. Backup List",
             ],
         }
     }
@@ -2638,6 +2703,7 @@ self.state = AppState::StatusView;
             AppState::NewServerWizard => self.draw_new_server_wizard(f),
             AppState::ModBrowser => self.draw_mod_browser(f),
             AppState::QuickCommands => self.draw_quick_commands(f),
+            AppState::BackupList => self.draw_backup_list(f),
         }
 
         // Draw message overlay if present

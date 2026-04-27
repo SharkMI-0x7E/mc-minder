@@ -100,43 +100,42 @@
 - 右侧面板显示已发现的服务器列表
 - 选中指示器 + 名称显示
 
-### ❌ P2-4: 独立配置文件管理
-- TUI 内编辑各实例的 `server.properties`
-- 支持保存，部分配置需重启生效
-- 一键复制配置模板到新实例
+### ⚠️ P2-4: 独立配置文件管理
+- TUI 内编辑各实例的基本信息（名称/目录）
+- `ServerConfigEdit` 状态已添加
+- 尚未: 完整的 server.properties 内联编辑
 
 ### ❌ P2-5: 实例隔离与并发
 - 每个服务器在独立 tokio task 中管理
 - 崩溃不影响其他实例
-- 并发启动/停止/重启
 
----
+### ...
+### ✅ P3-6: 拖入即用保留
+- 已保留手动放入 jar 的识别能力
+- `create_eula()` 自动创建 eula.txt
 
-## 🟠 Phase 3 — 核心与 Mod 管理
+### ...
+### ✅ P5-3: 备份列表与恢复
+- TUI "19. Backup List" 显示备份文件/大小
+- `list_backups()` + `restore_backup()` 已实现
 
-### ✅ P3-1: FabricMC 核心自动下载
-- API: `https://meta.fabricmc.net/v2/versions/loader/{ver}/0.17.2/1.1.0/server/jar`
-- `fetch_fabric_game_versions()` + `download_fabric_server()`
+### ...
+### ✅ P6-3: 告警机制
+- `alert` 字段已添加到 McStatusSnapshot
+- TUI 状态面板边框颜色跟随告警状态 (ok=green, warning=yellow, critical=red, offline=red)
 
-### ✅ P3-2: PaperMC 核心自动下载
-- API: `https://api.papermc.io/v2/projects/paper`
-- `fetch_paper_versions()` + `download_paper_server()`
+### ⚠️ P6-4: 玩家行为日志
+- 现有 monitor 模块已记录 join/leave/death 事件到日志
+- 尚未: TUI 查询面板
 
-### ✅ P3-3: 多核心类型选择
-- 新建服务器向导: 选核心类型 (Fabric/Vanilla/Paper) → 选版本 → 下载
-- 从官方 API 实时获取版本列表
+### ...
+### ✅ P7-2: 崩溃报告查看器
+- `scan_crash_reports()` 扫描 crash-reports 目录
+- 按文件名排序 (最新在前)
 
-### ✅ P3-4: Mod 平台集成 (Modrinth)
-- `search_modrinth()` + `get_modrinth_latest_version()` + `download_modrinth_mod()`
-- 热门 Mod 列表: Fabric API, Sodium, Lithium, Iris, Mod Menu
-
-### ❌ P3-5: Mod 更新检测
-- 列出已安装 Mod，对比在线版本
-- 高亮可更新的 Mod
-
-### ❌ P3-6: 自动配置检测 + EULA
-- 安装核心后自动设置 server.properties
-- EULA 同意提示
+### ✅ P7-3: 游戏内公告
+- `announce_countdown()` 方法已添加
+- Scheduler broadcast 动作支持定时公告
 
 ---
 
@@ -225,12 +224,12 @@
 |-------|------|----|----|-----|--------|
 | P0 核心 | 7 | 7 | 0 | 0 | 100% |
 | P1 TUI | 5 | 5 | 0 | 0 | 100% |
-| P2 多服 | 5 | 3 | 0 | 2 | 60% |
-| P3 核心 | 6 | 4 | 0 | 2 | 67% |
+| P2 多服 | 5 | 3 | 1 | 1 | 70% |
+| P3 核心 | 6 | 5 | 0 | 1 | 83% |
 | P4 自动 | 3 | 3 | 0 | 0 | 100% |
-| P5 备份 | 3 | 2 | 1 | 0 | 83% |
-| P6 监控 | 4 | 1 | 1 | 2 | 38% |
-| P7 工具 | 3 | 1 | 0 | 2 | 33% |
+| P5 备份 | 3 | 3 | 0 | 0 | 100% |
+| P6 监控 | 4 | 2 | 1 | 1 | 63% |
+| P7 工具 | 3 | 3 | 0 | 0 | 100% |
 | P8 架构 | 3 | 0 | 0 | 3 | 0% 💤 |
 
 总计: 39 任务，26 完成 (67%)
