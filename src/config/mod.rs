@@ -145,11 +145,19 @@ pub struct BackupConfig {
     pub backup_dest: String,
     #[serde(default = "default_retain_days")]
     pub retain_days: u32,
+    /// Max number of backups to keep (P5-2)
+    #[serde(default = "default_max_backups")]
+    pub max_backups: usize,
+    /// Max age of backups in days (P5-2)
+    #[serde(default = "default_max_backup_days")]
+    pub max_backup_days: u64,
 }
 
 fn default_world_dir() -> String { "world".to_string() }
 fn default_backup_dest() -> String { "../backups".to_string() }
 fn default_retain_days() -> u32 { 7 }
+fn default_max_backups() -> usize { 10 }
+fn default_max_backup_days() -> u64 { 30 }
 
 impl Default for BackupConfig {
     fn default() -> Self {
@@ -157,6 +165,8 @@ impl Default for BackupConfig {
             world_dir: default_world_dir(),
             backup_dest: default_backup_dest(),
             retain_days: default_retain_days(),
+            max_backups: default_max_backups(),
+            max_backup_days: default_max_backup_days(),
         }
     }
 }

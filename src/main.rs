@@ -14,6 +14,7 @@ mod command_sender;
 mod foreground_process;
 mod core_download;
 mod lazy_start;
+mod backup;
 
 use anyhow::Result;
 use clap::Parser;

@@ -84,6 +84,8 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
     // Schedule runner (P4-3): periodic backup/broadcast/restart
     if !config.schedules.is_empty() {
         let schedules = config.schedules.clone();
+        let backup_cfg = config.backup.clone();
+        let server_cfg = config.server.clone();
         let schedule_sender = rcon_sender.clone();
         let mut sched_shutdown = shutdown_tx.subscribe();
         tokio::spawn(async move {
@@ -94,6 +96,19 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
                         _ = tokio::time::sleep(wait) => {
                             let mut sender = schedule_sender.write().await;
                             match entry.action.as_str() {
+                                "backup" => {
+                                    let world = PathBuf::from(&server_cfg.jar)
+                                        .parent().unwrap_or(std::path::Path::new("."))
+                                        .join(&backup_cfg.world_dir);
+                                    let dest = PathBuf::from(&backup_cfg.backup_dest);
+                                    match crate::backup::create_backup(&world, &dest, &server_cfg.session_name) {
+                                        Ok(p) => {
+                                            info!("[Scheduler] Backup created: {:?}", p);
+                                            crate::backup::apply_retention(&dest, backup_cfg.max_backups, backup_cfg.max_backup_days);
+                                        }
+                                        Err(e) => warn!("[Scheduler] Backup failed: {}", e),
+                                    }
+                                }
                                 "broadcast" => {
                                     let _ = sender.send_command(&format!("say {}", entry.message)).await;
                                     info!("[Scheduler] Broadcast: {}", entry.message);

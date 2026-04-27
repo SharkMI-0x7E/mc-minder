@@ -912,7 +912,32 @@ impl App {
             }
             14 => self.open_new_server_wizard(),
             15 => self.open_mod_browser(),
+            16 => self.trigger_backup(),
             _ => {}
+        }
+    }
+
+    fn trigger_backup(&mut self) {
+        if let Some(ref cfg) = self.config {
+            let world = std::path::PathBuf::from(&cfg.server.jar)
+                .parent().unwrap_or(std::path::Path::new("."))
+                .join(&cfg.backup.world_dir);
+            let dest = std::path::PathBuf::from(&cfg.backup.backup_dest);
+            match crate::backup::create_backup(&world, &dest, &cfg.server.session_name) {
+                Ok(path) => {
+                    crate::backup::apply_retention(&dest, cfg.backup.max_backups, cfg.backup.max_backup_days);
+                    self.message = Some((
+                        format!("Backup: {}", path.display()),
+                        MessageType::Success,
+                    ));
+                }
+                Err(e) => {
+                    self.message = Some((
+                        format!("Backup failed: {}", e),
+                        MessageType::Warning,
+                    ));
+                }
+            }
         }
     }
 
@@ -1858,6 +1883,7 @@ self.state = AppState::StatusView;
                 "14. 退出",
                 "15. 新建服务器",
                 "16. Mod 下载",
+                "17. 备份世界",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1876,6 +1902,7 @@ self.state = AppState::StatusView;
                 "14. Exit",
                 "15. New Server",
                 "16. Mod Download",
+                "17. Backup World",
             ],
         }
     }
