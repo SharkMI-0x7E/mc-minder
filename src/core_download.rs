@@ -293,8 +293,108 @@ pub async fn download_paper_server(
 }
 
 // ============================================================
-// Common download helper
+// Modrinth API (Mod platform integration)
 // ============================================================
+
+#[derive(Debug, Deserialize)]
+pub struct ModrinthSearchResult {
+    pub hits: Vec<ModrinthHit>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ModrinthHit {
+    pub project_id: String,
+    pub title: String,
+    pub description: String,
+    pub downloads: i64,
+    pub project_type: String,
+    pub slug: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModrinthVersion {
+    pub files: Vec<ModrinthFile>,
+    pub version_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModrinthFile {
+    pub url: String,
+    pub filename: String,
+}
+
+/// Search Modrinth for mods.
+pub async fn search_modrinth(query: &str, limit: u32) -> Result<Vec<ModrinthHit>> {
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.modrinth.com/v2/search?query={}&limit={}&facets=[[\"project_type:mod\"],[\"categories:fabric\"]]",
+        urlencoding(query),
+        limit
+    );
+    let resp: ModrinthSearchResult = client
+        .get(&url)
+        .header("User-Agent", "mc-minder")
+        .send()
+        .await
+        .context("Failed to search Modrinth")?
+        .json()
+        .await
+        .context("Failed to parse Modrinth search")?;
+
+    Ok(resp.hits)
+}
+
+/// Get the latest stable version file for a Modrinth project.
+pub async fn get_modrinth_latest_version(project_id: &str, game_version: &str) -> Result<ModrinthFile> {
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.modrinth.com/v2/project/{}/version?loaders=[\"fabric\"]&game_versions=[\"{}\"]",
+        project_id, game_version
+    );
+    let versions: Vec<ModrinthVersion> = client
+        .get(&url)
+        .header("User-Agent", "mc-minder")
+        .send()
+        .await
+        .context("Failed to fetch Modrinth versions")?
+        .json()
+        .await
+        .context("Failed to parse Modrinth versions")?;
+
+    let version = versions.into_iter().next()
+        .ok_or_else(|| anyhow::anyhow!("No compatible version found for {}", game_version))?;
+
+    version.files.into_iter().next()
+        .ok_or_else(|| anyhow::anyhow!("No download file for Modrinth project {}", project_id))
+}
+
+/// Download a mod from Modrinth URL to the mods folder.
+pub async fn download_modrinth_mod(url: &str, filename: &str, output_dir: &Path) -> Result<String> {
+    let mods_dir = output_dir.join("mods");
+    std::fs::create_dir_all(&mods_dir).ok();
+    download_to_file(url, &mods_dir, filename).await
+}
+
+/// Popular Fabric mods for quick install.
+pub fn popular_mods() -> Vec<(&'static str, &'static str, &'static str)> {
+    vec![
+        ("fabric-api", "Fabric API", "P7dR8mSH"),
+        ("sodium", "Sodium", "AANobbMI"),
+        ("lithium", "Lithium", "gvQqBUqZ"),
+        ("phosphor", "Phosphor", "fQEb0iXm"),
+        ("iris", "Iris Shaders", "YL57xq9U"),
+        ("modmenu", "Mod Menu", "mOgUt4GM"),
+    ]
+}
+
+/// Simple URL encoding (just replaces space with %20).
+fn urlencoding(s: &str) -> String {
+    s.replace(' ', "%20")
+        .replace('&', "%26")
+        .replace('?', "%3F")
+        .replace('#', "%23")
+}
+
 
 async fn download_to_file(url: &str, output_dir: &Path, filename: &str) -> Result<String> {
     let output_path = output_dir.join(filename);

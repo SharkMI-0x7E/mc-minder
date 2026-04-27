@@ -90,6 +90,7 @@ pub enum AppState {
     Busy(String),  // Processing / loading overlay (P1-5)
     ServerConfigEdit,  // Edit selected server's config (P2-4)
     NewServerWizard,  // Create new server wizard (P3)
+    ModBrowser,  // Mod download browser (P3-4)
 }
 
 // Update state machine
@@ -240,6 +241,7 @@ impl App {
             AppState::Busy(_) => {},
             AppState::ServerConfigEdit => self.on_key_server_config_edit(key),
             AppState::NewServerWizard => self.on_key_new_server_wizard(key),
+            AppState::ModBrowser => self.on_key_mod_browser(key),
         }
     }
 
@@ -906,8 +908,14 @@ impl App {
                 self.state = AppState::ConfirmDialog(ConfirmAction::Exit);
             }
             14 => self.open_new_server_wizard(),
+            15 => self.open_mod_browser(),
             _ => {}
         }
+    }
+
+    fn open_mod_browser(&mut self) {
+        self.wizard_selected = 0;
+        self.state = AppState::ModBrowser;
     }
 
     /// Open the new server creation wizard (P3)
@@ -1167,6 +1175,67 @@ impl App {
             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
             .highlight_symbol("> ");
         let area = centered_rect(55, 30, f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
+        f.render_stateful_widget(list, area, &mut state);
+    }
+
+    fn on_key_mod_browser(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        let mods = crate::core_download::popular_mods();
+        let max = mods.len().saturating_sub(1);
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('8') => {
+                self.wizard_selected = self.wizard_selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('2') => {
+                if self.wizard_selected < max { self.wizard_selected += 1; }
+            }
+            KeyCode::Enter => {
+                if let Some((slug, name, project_id)) = mods.get(self.wizard_selected) {
+                    let dir = std::env::current_dir().unwrap_or_default();
+                    let rt = tokio::runtime::Handle::current();
+                    let game_ver = "1.21.1"; // default
+                    match rt.block_on(crate::core_download::get_modrinth_latest_version(project_id, game_ver)) {
+                        Ok(file) => {
+                            let filename = file.filename.clone();
+                            match rt.block_on(crate::core_download::download_modrinth_mod(&file.url, &filename, &dir)) {
+                                Ok(path) => {
+                                    self.message = Some((format!("Downloaded: {}", path), MessageType::Success));
+                                }
+                                Err(e) => {
+                                    self.message = Some((format!("{} failed: {}", name, e), MessageType::Warning));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.message = Some((format!("{} not found for {}: {}", name, game_ver, e), MessageType::Warning));
+                        }
+                    }
+                }
+                self.state = AppState::MainMenu;
+            }
+            _ => {}
+        }
+    }
+
+    fn draw_mod_browser(&self, f: &mut Frame) {
+        let mods = crate::core_download::popular_mods();
+        let items: Vec<ListItem> = mods.iter()
+            .map(|(_, name, _)| ListItem::new(Span::raw(*name)))
+            .collect();
+        let mut state = ratatui::widgets::ListState::default();
+        state.select(Some(self.wizard_selected));
+        let title = match self.language {
+            Language::Chinese => "热门 Mod (Enter下载 Esc返回)",
+            Language::English => "Popular Mods (Enter download Esc back)",
+        };
+        let list = List::new(items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ");
+        let area = centered_rect(50, 25, f.area());
         f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)), area);
         f.render_stateful_widget(list, area, &mut state);
     }
@@ -1785,6 +1854,7 @@ self.state = AppState::StatusView;
                 "13. 语言设置",
                 "14. 退出",
                 "15. 新建服务器",
+                "16. Mod 下载",
             ],
             Language::English => vec![
                 "1. Start Server (Background)",
@@ -1802,6 +1872,7 @@ self.state = AppState::StatusView;
                 "13. Language Settings",
                 "14. Exit",
                 "15. New Server",
+                "16. Mod Download",
             ],
         }
     }
@@ -2484,6 +2555,7 @@ self.state = AppState::StatusView;
             AppState::Busy(msg) => self.draw_busy(f, msg),
             AppState::ServerConfigEdit => self.draw_server_config_edit(f),
             AppState::NewServerWizard => self.draw_new_server_wizard(f),
+            AppState::ModBrowser => self.draw_mod_browser(f),
         }
 
         // Draw message overlay if present
