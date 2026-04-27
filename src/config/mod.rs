@@ -5,6 +5,9 @@ use anyhow::{Result, Context};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
+    #[serde(default)]
+    pub servers: Vec<ServerInstance>,
+    #[serde(default)]
     pub rcon: RconConfig,
     #[serde(default)]
     pub server: ServerConfig,
@@ -25,7 +28,18 @@ pub struct RconConfig {
     pub host: String,
     #[serde(default = "default_rcon_port")]
     pub port: u16,
+    #[serde(default)]
     pub password: String,
+}
+
+impl Default for RconConfig {
+    fn default() -> Self {
+        Self {
+            host: default_rcon_host(),
+            port: default_rcon_port(),
+            password: String::new(),
+        }
+    }
 }
 
 fn default_rcon_host() -> String { "127.0.0.1".to_string() }
@@ -191,6 +205,25 @@ impl Default for JvmConfig {
 }
 
 impl Config {
+    /// Returns the list of active server instances.
+    /// If [[servers]] is configured, returns those.
+    /// Otherwise, falls back to the legacy single-server config.
+    pub fn get_servers(&self) -> Vec<ServerInstance> {
+        if !self.servers.is_empty() {
+            return self.servers.clone();
+        }
+        // Legacy mode: create a single instance from top-level config
+        vec![ServerInstance {
+            name: "default".to_string(),
+            dir: ".".to_string(),
+            server: self.server.clone(),
+            rcon: Some(self.rcon.clone()),
+            jvm: self.jvm.clone(),
+        }]
+    }
+}
+
+impl Config {
     pub fn load(path: &PathBuf) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {:?}", path))?;
@@ -199,15 +232,21 @@ impl Config {
     }
 
     pub fn load_from_str(content: &str) -> Result<Self> {
-        let config: Config = toml::from_str(content)
+        let mut config: Config = toml::from_str(content)
             .with_context(|| "Failed to parse config file")?;
+
+        // Backward compat: if no servers configured and no rcon password,
+        // fill in defaults from top-level config
+        if config.servers.is_empty() && config.rcon.password.is_empty() {
+            config.rcon = RconConfig::default();
+        }
         
         Ok(config)
     }
 
     pub fn generate_template() -> String {
         let s = r#"# MC-Minder Configuration File
-
+# 单服务器配置（传统模式）
 [server]
 jar = "fabric-server.jar"
 min_mem = "512M"
@@ -234,7 +273,80 @@ termux_notify = true
 gc = "G1GC"
 extra_flags = ""
 # jdk_path = "/usr/lib/jvm/java-17-openjdk/bin/java"
+
+# 多服务器配置（取消注释启用）
+# [[servers]]
+# name = "survival"
+# dir = "./survival"
+# [servers.server]
+# jar = "fabric-server.jar"
+# min_mem = "1G"
+# max_mem = "2G"
+# [servers.rcon]
+# password = "secret1"
 "#;
         s.to_string()
     }
+}
+
+/// A managed Minecraft server instance.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ServerInstance {
+    /// Display name for this server
+    #[serde(default = "default_instance_name")]
+    pub name: String,
+    /// Directory containing this server's files (relative to config.toml)
+    #[serde(default = "default_instance_dir")]
+    pub dir: String,
+    /// Server configuration (jar, memory, etc.)
+    #[serde(default)]
+    pub server: ServerConfig,
+    /// RCON configuration (optional override)
+    #[serde(default)]
+    pub rcon: Option<RconConfig>,
+    /// JVM configuration
+    #[serde(default)]
+    pub jvm: JvmConfig,
+}
+
+fn default_instance_name() -> String { "server".to_string() }
+fn default_instance_dir() -> String { ".".to_string() }
+
+/// Auto-discover server instances in subdirectories.
+/// Returns a list of discovered servers with their names and directories.
+pub fn discover_servers(base_dir: &std::path::Path) -> Vec<DiscoveredServer> {
+    let mut servers = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(base_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            // Check if this directory looks like a Minecraft server
+            let has_jar = path.read_dir().map(|d| {
+                d.flatten().any(|e| {
+                    e.file_name().to_string_lossy().contains("server")
+                        || e.file_name().to_string_lossy().ends_with(".jar")
+                })
+            }).unwrap_or(false);
+            let has_props = path.join("server.properties").exists();
+            if has_jar || has_props {
+                let name = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                servers.push(DiscoveredServer {
+                    name,
+                    dir: path.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+    servers
+}
+
+/// Result of auto-discovering a server instance.
+#[derive(Debug, Clone)]
+pub struct DiscoveredServer {
+    pub name: String,
+    pub dir: String,
 }

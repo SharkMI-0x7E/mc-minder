@@ -54,6 +54,9 @@ pub struct App {
     pub mc_status_cache: Option<std::sync::Arc<tokio::sync::RwLock<Option<(crate::api::McStatusSnapshot, std::time::Instant)>>>>,
     // Cached MC status snapshot for display
     pub mc_status_snapshot: Option<crate::api::McStatusSnapshot>,
+    // Discovered server instances (P2)
+    pub discovered_servers: Vec<crate::config::DiscoveredServer>,
+    pub selected_server: usize,
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -127,6 +130,10 @@ impl App {
             }
         };
 
+        // Scan for server instances on startup
+        let scan_dir = config_path.parent().unwrap_or(std::path::Path::new("."));
+        let discovered = crate::config::discover_servers(scan_dir);
+
         App {
             state: initial_state,
             should_quit: false,
@@ -156,6 +163,8 @@ impl App {
             fg_server_alive: false,
             mc_status_cache: None,
             mc_status_snapshot: None,
+            discovered_servers: discovered,
+            selected_server: 0,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -385,7 +394,8 @@ impl App {
         } else {
             // create a minimal default config
             Config {
-                rcon: crate::config::RconConfig { host: "127.0.0.1".to_string(), port: 25575, password: String::new() },
+                servers: Vec::new(),
+                rcon: crate::config::RconConfig::default(),
                 server: crate::config::ServerConfig::default(),
                 backup: crate::config::BackupConfig::default(),
                 notification: crate::config::NotificationConfig::default(),
@@ -2212,12 +2222,20 @@ self.state = AppState::StatusView;
         // Process status
         let session = self.get_session_name();
         s.push_str(&format!(
-            "进程状态:\n  tmux: {} ({})\n  MC-Minder: {}\n  看门狗: {}\n\n快捷: F5=刷新 F7=备份 c=控制台",
+            "进程状态:\n  tmux: {} ({})\n  MC-Minder: {}\n  看门狗: {}\n\n快捷: F5=刷新 F7=备份 c=控制台\n\n",
             session,
             if self.server_running { "ON" } else { "OFF" },
             if self.mc_minder_running { "ON" } else { "OFF" },
             if self.watchdog_running { "ON" } else { "OFF" },
         ));
+        // Discovered servers
+        if !self.discovered_servers.is_empty() {
+            s.push_str("发现的服务器:\n");
+            for (i, ds) in self.discovered_servers.iter().enumerate() {
+                let marker = if i == self.selected_server { ">" } else { " " };
+                s.push_str(&format!("  {} {}\n", marker, ds.name));
+            }
+        }
         s
     }
 
