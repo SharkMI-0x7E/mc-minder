@@ -507,15 +507,86 @@ update code
 3. **专业形象**: 让项目看起来更专业、更易维护
 4. **AI 友好**: 后续 AI 助手可以更好地理解项目历史
 
-### Git 提交流程检查清单
+## 外部依赖
 
-提交前请确认：
-- [ ] commit message 符合 Conventional Commits 格式
-- [ ] type 正确反映了变更性质
-- [ ] scope 准确标识了影响范围
-- [ ] subject 简洁明了地描述了变更内容
-- [ ] 如果是发布新版本，已更新 Cargo.toml 和 AGENTS.md 的版本号
+### mc-status-probe
 
+MC 服务器状态查询功能依赖 `mc-status-probe` 库（`https://crates.io/crates/mc-status-probe`）。
+该库已在 crates.io 发布，**不需要**将其源代码放在 mc-minder 项目目录中。
+
+**Cargo.toml 配置**：
+```toml
+mc-status-probe = "0.1.0-alpha.2"
+```
+
+如果本地开发需要同时修改 msp，可以临时改为 path 依赖：
+```toml
+mc-status-probe = { version = "0.1.0-alpha.2", path = "mc-status-probe" }
+```
+
+msp 独立仓库：`https://github.com/SharkMI-0x7E/mc-status-probe`
+
+---
+
+## 测试指南
+
+### 本地开发测试
+
+```bash
+# 编译检查（不生成二进制，速度快）
+cargo check
+
+# 运行所有单元测试
+cargo test --lib
+
+# 运行指定模块的测试
+cargo test --lib monitor
+
+# 运行所有测试（含集成测试）
+cargo test
+
+# 编译并运行 TUI（功能测试）
+cargo run -- tui
+
+# 编译 release 版本
+cargo build --release
+```
+
+### 测试清单（提交前必做）
+
+- [ ] `cargo check` 零错误零警告
+- [ ] `cargo test --lib` 全部通过
+- [ ] `cargo build --release` 成功
+- [ ] 如果改了 TUI：`cargo run -- tui` 启动确认界面正常
+
+### 关于 release
+
+**不要手动 `cargo publish`**。发布由 CI/CD 在打 tag 时自动完成。
+只需推送 tag：`git tag v0.x.x && git push origin v0.x.x`
+
+### Release Changelog 生成规则
+
+CI/CD 根据 commit message 自动生成 Release 描述。为了让每个改动都清晰可见：
+
+1. **一个 commit 只做一件事** — 不要把多个不相关的功能写在一个 commit 里
+2. **subject 一行写完** — 核心描述写在一行内，不要换行
+3. **body 写详细说明** — 需要详细解释的内容写在 subject 后面的空行里
+
+正例 ✅：
+```
+feat(tui): add interactive Java version picker
+
+- Add JavaSwitch state with list navigation
+- Enter to confirm selection, updates config.toml
+- Esc to cancel and return to menu
+```
+
+反例 ❌：
+```
+feat: add Java switch, fix foreground mode, update README, bump version
+```
+
+---
 
 ### 用户个人要求
 我是windows10系统，然后python不知道为什么没有上环境变量，所以你要执行python命令的时候不要使用 "python xxx.py" 要使用 "py xxx.py"
