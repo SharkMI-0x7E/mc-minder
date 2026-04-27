@@ -16,13 +16,13 @@
 ## 功能特性
 
 - **日志监控**：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
+- **服务器状态查询**：基于 wiki.vg 协议的 MC 服务器 Ping，实时显示玩家数/版本/延迟/MOTD
 - **RCON 通信**：持久 RCON 连接池，自动重连，命令响应可见
-- **聊天捕获**：ChatCapture trait 统一接口，支持 Tmux/File/Process 三种模式
-- **前台进程**：TUI 内直接运行 Java 进程，stdio 管道实时捕获
-- **HTTP API**：RESTful API 用于状态查询和命令执行（返回 RCON 响应）
-- **Java 管理**：自动检测 Java 版本，平台专属安装指引，自定义 JDK 路径
-- **一键安装**：交互式初始化，自动检测环境依赖
-- **自动更新**：内置 self-update 命令
+- **HTTP API**：RESTful API 用于服务器状态查询和 RCON 命令执行
+- **Java 管理**：自动检测 Java 版本，一键安装 JDK（Termux/Linux/macOS），交互式切换
+- **TUI 管理界面**：原生 Rust 终端 UI，服务器控制、控制台视图、日志查看、更新管理
+- **一键安装**：交互式初始化，自动检测环境依赖（Java、RCON、端口）
+- **多平台**：预编译二进制支持 Linux x64/ARM64、Termux/Android、Windows x64
 
 ## 快速开始
 
@@ -90,6 +90,14 @@ cargo build --target aarch64-unknown-linux-gnu --release
 
 或者从 [Releases](https://github.com/SharkMI-0x7E/mc-minder/releases/latest) 下载预编译二进制文件 (`mc-minder-aarch64-linux`)。
 
+### Windows (x86_64)
+
+```bash
+# 从 Releases 页面下载 mc-minder-x86_64-windows.exe
+# 或在 Git Bash / MSYS2 中运行安装脚本
+curl -fsSL https://github.com/SharkMI-0x7E/mc-minder/releases/latest/download/install.sh | bash
+```
+
 ## 使用方法
 
 ### 目录结构
@@ -135,6 +143,10 @@ gc = "G1GC"
 extra_flags = ""
 # jdk_path = "/usr/lib/jvm/java-17-openjdk/bin/java"  # 可选：自定义 JDK 路径
 
+# 服务器类型（计划中）
+# 可选：fabric / paper / vanilla / forge
+server_type = "fabric"
+
 # 备份配置
 [backup]
 world_dir = "world"
@@ -146,6 +158,11 @@ retain_days = 7
 telegram_bot_token = ""
 telegram_chat_id = ""
 termux_notify = true
+
+# MC 状态查询配置
+[mc_status]
+ping_interval_secs = 60   # 状态查询间隔（秒）
+ping_timeout_secs = 3     # 单次查询超时（秒）
 ```
 
 ### 启动脚本命令
@@ -227,8 +244,24 @@ MC-Minder 提供完整的 Java 管理功能：
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/status` | GET | 获取服务器状态和运行时间 |
+| `/status` | GET | 获取服务器状态（运行时间 + MC 状态 + RCON 可用性） |
 | `/command` | POST | 执行 RCON 命令 |
+
+`/status` 返回示例：
+```json
+{
+  "status": "running",
+  "uptime": 3600,
+  "mc_status": {
+    "online": true,
+    "players_online": 3,
+    "players_max": 20,
+    "version": "1.21",
+    "latency_ms": 12,
+    "motd": "A Minecraft Server"
+  },
+  "rcon_available": true
+}
 
 示例：
 
@@ -276,7 +309,8 @@ Options:
 
 - Rust 1.70+（仅编译时需要）
 - Java 17+（用于 Minecraft 服务器）
-- tmux（用于会话管理）
+- tmux（用于会话管理，Linux/Termux）
+- 支持平台：Linux x64/ARM64、Windows x64、macOS（编译）、Termux/Android
 
 ## Windows 换行符问题
 

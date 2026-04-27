@@ -7,20 +7,20 @@
 **项目名称**: mc-minder  
 **描述**: 为 Termux/Android 上的 Minecraft Fabric 服务器设计的智能管理套件  
 **语言**: Rust (Edition 2021)  
-**版本**: 0.5.2 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
+**版本**: 0.6.0-alpha.1 <!-- ⚠️ 每次发布新版本时请同步更新此处版本号 -->
 **仓库**: https://github.com/SharkMI-0x7E/mc-minder
 
 ## 核心功能
 
 - 日志监控：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
-- AI 聊天机器人：支持 OpenAI API 和 Ollama，玩家使用 `!` 前缀触发，内置请求限流
+- 服务器状态查询：基于 wiki.vg 协议的 MC Ping，实时显示玩家数/版本/延迟
 - RCON 通信：持久连接池，自动重连，响应返回
-- 聊天捕获：ChatCapture trait 统一接口，支持 Tmux/File/Process 三种模式
-- 前台进程：TUI 内直接运行 Java 进程，stdio 管道实时捕获
-- 上下文记忆：按玩家保存对话历史，自动过期清理
-- HTTP API：RESTful API 用于状态查询和命令执行（返回 RCON 响应）
+- HTTP API：RESTful API (/status + /command)，MC 状态集成
+- Java 管理：自动检测、一键安装、交互式切换
+- TUI 管理界面：原生 Rust 终端 UI
 - 一键安装：交互式初始化配置
 - 自动更新：内置 self-update 命令
+- 多平台：Linux x64/ARM64、Termux/Android、Windows x64
 
 ## 国际化文档同步
 
@@ -111,13 +111,22 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 - **输出文件**: `mc-minder-aarch64-linux`
 - **缓存**: 使用 `actions/cache@v3` 缓存 cargo registry 和 target 目录
 
-#### 4. Release 发布 (`release`)
-- **依赖**: `needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64]`
+#### 4. Windows x86_64 构建 (`build-windows-x86_64`)
+- **Runner**: `ubuntu-latest`
+- **工具链**: `dtolnay/rust-toolchain@stable` + `x86_64-pc-windows-gnu` target
+- **安装 cross**: 使用 `cargo-binstall -y cross` 快速安装预编译版本
+- **构建命令**: `cross build --target x86_64-pc-windows-gnu --release`
+- **输出文件**: `mc-minder-x86_64-windows.exe`
+- **缓存**: 使用 `actions/cache@v3` 缓存 cargo registry 和 target 目录
+
+#### 5. Release 发布 (`release`)
+- **依赖**: `needs: [build-linux-x86_64, build-termux-aarch64, build-linux-aarch64, build-windows-x86_64]`
 - **发布工具**: `softprops/action-gh-release@v1`
 - **附件文件**:
   - `binaries/mc-minder-x86_64-linux/mc-minder-x86_64-linux`
   - `binaries/mc-minder-termux-aarch64/mc-minder-termux-aarch64`
   - `binaries/mc-minder-aarch64-linux/mc-minder-aarch64-linux`
+  - `binaries/mc-minder-x86_64-windows/mc-minder-x86_64-windows.exe`
   - `install.sh`
 
 ### CI/CD 坑点总结 (血泪史!)
@@ -187,6 +196,8 @@ mc-minder/
 │   ├── server_run.rs        # 服务器运行主循环
 │   ├── command_sender.rs     # 命令发送（RCON/Stdin连接池）
 │   ├── foreground_process.rs # 前台进程管理（Java进程stdio管道）
+│   │
+│   ├── mc-status-probe/     # MC 服务器状态查询库（wiki.vg 协议实现）
 │   │
 │   ├── tui/                 # TUI 模块（替代 Shell 脚本）
 │   │   ├── mod.rs           # TUI 入口 + 终端管理 + 前台进程spawn
@@ -382,6 +393,9 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 - [ ] 不要写太长的 commit message，保持在 50 字符以内
 
 ## 更新日志
+- 2026-04-27: **v0.6.0-alpha.1 发布!** 新增 mc-status-probe 原创库（wiki.vg MC Ping 协议实现）、HTTP API 增强（/status 含 MC 状态、/command RCON 预检）、Windows x86_64 CI/CD 支持、discover_minecraft_port 自动端口发现
+- 2026-04-26: **v0.5.6 发布!** 恢复前台模式为终端 exec
+- 2026-04-26: **v0.5.5 发布!** Java 交互式版本切换
 - 2026-04-26: **v0.5.2 发布!** 添加 Linux ARM64 交叉编译支持（aarch64-unknown-linux-gnu），修复 install.sh 的各种问题（ARM64 检测、脚本库下载、dialog 过期警告）
 - 2026-04-26: **v0.5.1 发布!** 消除所有 dead_code 警告，删除未使用的 rcon 模块，更新 README
 - 2026-04-26: **v0.5.0 发布!** 彻底移除 LLM/AI 功能，完善初始化配置（Java 自动检测、JDK 路径配置），增强 TUI Java 菜单（版本检测、安装指引）

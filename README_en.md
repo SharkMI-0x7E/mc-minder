@@ -220,9 +220,25 @@ Players trigger AI responses by prefixing messages with `!`:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/status` | GET | Get server status and uptime |
-| `/history` | GET | Get conversation history |
+| `/status` | GET | Server status (uptime + MC status + RCON availability) |
 | `/command` | POST | Execute RCON command |
+
+`/status` response example:
+```json
+{
+  "status": "running",
+  "uptime": 3600,
+  "mc_status": {
+    "online": true,
+    "players_online": 3,
+    "players_max": 20,
+    "version": "1.21",
+    "latency_ms": 12,
+    "motd": "A Minecraft Server"
+  },
+  "rcon_available": true
+}
+```
 
 Example:
 
