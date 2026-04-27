@@ -73,6 +73,7 @@ pub struct App {
     pub wizard_versions: Vec<String>,
     pub wizard_selected: usize,
     pub wizard_step: u8, // 0=core type, 1=version, 2=downloading
+    pub java_cache: Vec<(String, String)>,  // cached Java versions
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -195,6 +196,7 @@ impl App {
             wizard_versions: Vec::new(),
             wizard_selected: 0,
             wizard_step: 0,
+            java_cache: Vec::new(),
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -1582,7 +1584,10 @@ self.state = AppState::StatusView;
     }
 
     fn switch_java_version(&mut self) {
-        let versions = self.detect_java_versions();
+        if self.java_cache.is_empty() {
+            self.java_cache = self.detect_java_versions();
+        }
+        let versions = self.java_cache.clone();
         if versions.is_empty() {
             self.message = Some((
                 if matches!(self.language, Language::Chinese) {
@@ -1618,6 +1623,9 @@ self.state = AppState::StatusView;
     }
 
     fn show_installed_java(&mut self) {
+        if self.java_cache.is_empty() {
+            self.java_cache = self.detect_java_versions();
+        }
         let versions = self.detect_java_versions();
         let msg = if versions.is_empty() {
             if matches!(self.language, Language::Chinese) {
@@ -1943,9 +1951,15 @@ self.state = AppState::StatusView;
 
         // Left: main menu
         let menu_items = self.main_menu_items();
-        let list_items: Vec<ListItem> = menu_items.iter()
-            .map(|i| ListItem::new(Span::raw(*i)))
-            .collect();
+        let list_items: Vec<ListItem> = menu_items.iter().enumerate().map(|(i, text)| {
+            let color = match i {
+                0..=3 => Color::Green,
+                4..=7 => Color::Cyan,
+                8..=13 => Color::Yellow,
+                _ => Color::Magenta,
+            };
+            ListItem::new(Span::styled(*text, Style::default().fg(color)))
+        }).collect();
         let mut state = ratatui::widgets::ListState::default();
         state.select(Some(self.main_menu_selected));
         let title = match self.language {
