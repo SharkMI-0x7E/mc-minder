@@ -21,6 +21,12 @@ pub struct McStatusSnapshot {
     pub motd: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// TPS from RCON (Paper/Purpur servers), None if unavailable (P6-1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tps: Option<f64>,
+    /// Alert status: "ok", "warning", "critical" (P6-3)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alert: Option<String>,
 }
 
 impl McStatusSnapshot {
@@ -33,6 +39,8 @@ impl McStatusSnapshot {
             latency_ms: 0,
             motd: String::new(),
             error: Some(error.to_string()),
+            tps: None,
+            alert: Some("offline".to_string()),
         }
     }
 }
@@ -131,6 +139,8 @@ impl HttpApi {
                 latency_ms: r.latency_ms,
                 motd: r.description,
                 error: None,
+                tps: None,
+                alert: None,
             },
             Err(e) => McStatusSnapshot::offline(&e.to_string()),
         };

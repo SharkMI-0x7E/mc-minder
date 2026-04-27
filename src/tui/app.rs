@@ -7,6 +7,14 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Span, Line};
 use ratatui::Frame;
 
+/// Menu item: either a selectable action (with index into execute_main_menu_action)
+/// or a non-selectable section header.
+#[derive(Clone)]
+enum MenuEntry {
+    Header { label: &'static str, color: Color },
+    Action { label: &'static str, action_index: usize },
+}
+
 use crate::config::Config;
 use crate::update_engine::{UpdateEngine, UpdateMsg};
 use crate::foreground_process::{ForegroundProcess, ProcessOutput};
@@ -70,6 +78,8 @@ pub struct App {
     pub update_engine: UpdateEngine,
     pub update_rx: Option<tokio::sync::mpsc::Receiver<UpdateMsg>>,
     pub update_state: Option<UpdateState>,
+    // Java versions cache (populated on first access, reused thereafter)
+    pub java_versions_cache: Option<Vec<(String, String)>>,
 }
 
 pub enum AppState {
@@ -188,6 +198,7 @@ impl App {
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
+            java_versions_cache: None,
         }
     }
 

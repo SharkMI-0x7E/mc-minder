@@ -17,13 +17,17 @@
 
 ## 功能特性
 
-- **日志监控**：使用 notify 库实时监控服务器日志，事件驱动，低 CPU 占用
-- **服务器状态查询**：基于 wiki.vg 协议的 MC 服务器 Ping，实时显示玩家数/版本/延迟/MOTD
+- **服务器状态查询**：基于 wiki.vg 协议的 MC Ping，实时显示玩家数/版本/延迟/MOTD + TPS 监控
 - **RCON 通信**：持久 RCON 连接池，自动重连，命令响应可见
-- **HTTP API**：RESTful API 用于服务器状态查询和 RCON 命令执行
-- **Java 管理**：自动检测 Java 版本，一键安装 JDK（Termux/Linux/macOS），交互式切换
-- **TUI 管理界面**：原生 Rust 终端 UI，服务器控制、控制台视图、日志查看、更新管理
-- **一键安装**：交互式初始化，自动检测环境依赖（Java、RCON、端口）
+- **备份系统**：一键备份世界，自动保留策略（最大数量/天数），定时备份
+- **核心下载**：Fabric / Paper / Vanilla 服务端一键下载，新建服务器向导
+- **Mod 管理**：Modrinth API 集成，热门 Fabric Mod 一键安装
+- **HTTP API**：RESTful API (/status + /command)，MC 状态 + TPS + RCON 可用性
+- **Java 管理**：自动检测 Java 版本，一键安装 JDK，交互式切换
+- **计划任务**：定时广播、备份、重启服务器
+- **看门狗**：RCON 健康检查 + 自动重启
+- **懒启动**：TCP 监听器，有人连接才启动服务器，无人自动停服
+- **TUI 管理界面**：原生 Rust 终端 UI，服务器控制、控制台视图、日志查看
 - **多平台**：预编译二进制支持 Linux x64/ARM64、Termux/Android、Windows x64
 
 ## 快速开始

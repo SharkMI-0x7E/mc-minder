@@ -67,10 +67,35 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
     let _mc_status_cache = http_api.mc_status_cache.clone();
     let mc_poll_interval = Duration::from_secs(config.mc_status.ping_interval_secs);
     let poll_api = http_api.clone();
+    let poll_rcon = rcon_sender.clone();
+    let poll_cache = http_api.mc_status_cache.clone();
     let mut poll_shutdown = shutdown_tx.subscribe();
     tokio::spawn(async move {
         loop {
             let _ = poll_api.fetch_mc_status().await;
+            // Try RCON TPS query (P6-1)
+            if let Ok(mut sender) = poll_rcon.try_write() {
+                if let Ok(resp) = sender.send_command("tps").await {
+                    if let Ok(mut cache) = poll_cache.try_write() {
+                        if let Some((ref mut snap, _)) = *cache {
+                            // Parse TPS from Paper/Purpur RCON response
+                            // Format: "TPS from last 1m, 5m, 15m: 20.0, 18.5, 19.2"
+                            let tps_val = resp.lines()
+                                .find(|l| l.contains("1m") || l.contains("15m"))
+                                .and_then(|l| l.split(':').nth(1))
+                                .and_then(|s| s.split(',').next())
+                                .and_then(|s| s.trim().parse::<f64>().ok());
+                            snap.tps = tps_val;
+                            snap.alert = match tps_val {
+                                Some(t) if t >= 18.0 => Some("ok".to_string()),
+                                Some(t) if t >= 10.0 => Some("warning".to_string()),
+                                Some(_) => Some("critical".to_string()),
+                                None => None,
+                            };
+                        }
+                    }
+                }
+            }
             tokio::select! {
                 _ = tokio::time::sleep(mc_poll_interval) => {}
                 _ = poll_shutdown.recv() => {
