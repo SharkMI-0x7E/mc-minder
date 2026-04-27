@@ -158,29 +158,8 @@ impl App {
     }
 
     /// Normalize key codes for cross-platform compatibility.
-    /// On some Windows terminals, numpad keys send Char events
-    /// instead of Up/Down/Left/Right/Enter when NumLock is on.
     fn normalize_key(key: crossterm::event::KeyEvent) -> crossterm::event::KeyEvent {
-        use crossterm::event::KeyCode;
-        // Only remap when no explicit modifiers (Shift/Ctrl/Alt) are pressed
-        if !key.modifiers.is_empty() {
-            return key;
-        }
-        let code = match key.code {
-            // Numpad arrow keys (NumLock on) → arrow keys
-            KeyCode::Char('8') => KeyCode::Up,
-            KeyCode::Char('2') => KeyCode::Down,
-            KeyCode::Char('4') => KeyCode::Left,
-            KeyCode::Char('6') => KeyCode::Right,
-            // All other keys unchanged
-            other => other,
-        };
-        crossterm::event::KeyEvent {
-            code,
-            modifiers: key.modifiers,
-            kind: key.kind,
-            state: key.state,
-        }
+        key
     }
 
     pub fn on_key(&mut self, key: crossterm::event::KeyEvent) {
@@ -203,17 +182,10 @@ impl App {
 
     fn on_key_main_menu(&mut self, key: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
+        let item_count = self.main_menu_items().len();
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => { self.should_quit = true; }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.main_menu_selected = (self.main_menu_selected + 1) % 13;
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.main_menu_selected = if self.main_menu_selected == 0 { 12 } else { self.main_menu_selected - 1 };
-            }
-            KeyCode::Enter => {
-                self.execute_main_menu_action(self.main_menu_selected);
-            }
+            // Quick-select (must be BEFORE nav to avoid conflict with numpad)
             KeyCode::Char('1') => self.execute_main_menu_action(0),
             KeyCode::Char('2') => self.execute_main_menu_action(1),
             KeyCode::Char('3') => self.execute_main_menu_action(2),
@@ -223,19 +195,48 @@ impl App {
             KeyCode::Char('7') => self.execute_main_menu_action(6),
             KeyCode::Char('8') => self.execute_main_menu_action(7),
             KeyCode::Char('9') => self.execute_main_menu_action(8),
+            KeyCode::Enter => {
+                self.execute_main_menu_action(self.main_menu_selected);
+            }
+            // Navigation (numpad 2/8 also work as Down/Up)
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.main_menu_selected = (self.main_menu_selected + 1) % item_count;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.main_menu_selected = if self.main_menu_selected == 0 {
+                    item_count.saturating_sub(1)
+                } else {
+                    self.main_menu_selected - 1
+                };
+            }
+            code if code == KeyCode::Char('2') => {
+                self.main_menu_selected = (self.main_menu_selected + 1) % item_count;
+            }
+            code if code == KeyCode::Char('8') => {
+                self.main_menu_selected = if self.main_menu_selected == 0 {
+                    item_count.saturating_sub(1)
+                } else {
+                    self.main_menu_selected - 1
+                };
+            }
             _ => {}
         }
     }
 
     fn on_key_java_menu(&mut self, key: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
+        let item_count = self.java_menu_items().len();
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => { self.state = AppState::MainMenu; }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.java_menu_selected = (self.java_menu_selected + 1) % 4;
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('2') => {
+                self.java_menu_selected = (self.java_menu_selected + 1) % item_count;
             }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.java_menu_selected = if self.java_menu_selected == 0 { 3 } else { self.java_menu_selected - 1 };
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('8') => {
+                self.java_menu_selected = if self.java_menu_selected == 0 {
+                    item_count.saturating_sub(1)
+                } else {
+                    self.java_menu_selected - 1
+                };
             }
             KeyCode::Enter => {
                 match self.java_menu_selected {

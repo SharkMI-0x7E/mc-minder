@@ -67,10 +67,17 @@ pub async fn run_server(args: Args, mode: ServerMode) -> Result<()> {
     let _mc_status_cache = http_api.mc_status_cache.clone();
     let mc_poll_interval = Duration::from_secs(config.mc_status.ping_interval_secs);
     let poll_api = http_api.clone();
+    let mut poll_shutdown = shutdown_tx.subscribe();
     tokio::spawn(async move {
         loop {
             let _ = poll_api.fetch_mc_status().await;
-            tokio::time::sleep(mc_poll_interval).await;
+            tokio::select! {
+                _ = tokio::time::sleep(mc_poll_interval) => {}
+                _ = poll_shutdown.recv() => {
+                    log::info!("MC status poller shutting down");
+                    break;
+                }
+            }
         }
     });
 

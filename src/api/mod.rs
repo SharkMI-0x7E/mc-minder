@@ -108,10 +108,19 @@ impl HttpApi {
             return McStatusSnapshot::offline("status probe busy, retry later");
         }
 
+        // Use a simple struct to guarantee lock release on cancel/drop
+        struct PingGuard<'a>(&'a AtomicBool);
+        impl<'a> Drop for PingGuard<'a> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
+        let _guard = PingGuard(&self.ping_lock);
+
         let timeout = Duration::from_secs(self.mc_status_config.ping_timeout_secs);
         let result = mc_status_probe::ping("127.0.0.1", self.mc_port, timeout, None).await;
 
-        self.ping_lock.store(false, Ordering::Release);
+        // Guard auto-releases on return/cancel/drop — no manual store(false) needed
 
         let snapshot = match result {
             Ok(r) => McStatusSnapshot {

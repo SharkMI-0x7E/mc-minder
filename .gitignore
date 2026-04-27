@@ -3,6 +3,7 @@
 
 *.log
 *.pid
+logs/
 
 config.toml
 
