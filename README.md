@@ -1,17 +1,19 @@
-# MC-Minder
+# <p align="center">MC-Minder</p>
 
-[![Build and Release](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml/badge.svg)](https://github.com/SharkMI-0x7E/mc-minder/actions/workflows/release.yml)
-[![Crates.io](https://img.shields.io/crates/v/mc-minder.svg)](https://crates.io/crates/mc-minder)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+<p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/SharkMI-0x7E/mc-minder/release.yml" alt="Build">
+  <img src="https://img.shields.io/crates/v/mc-minder.svg" alt="Crates.io">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+  <img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Rust">
+</p>
 
-[English](./README_en.md) | 中文
+<p align="center"><a href="./README_en.md">English</a> | 中文</p>
 
-一个为 Minecraft Fabric 服务器设计的智能管理套件，支持 MacOS、Linux 和 Termux/Android 环境。
+<p align="center">为 Minecraft Fabric 服务器设计的智能管理套件<br>支持 Windows、macOS、Linux 和 Termux/Android</p>
 
-> 本项目诞生于在 Termux 上更方便地管理 Minecraft 服务器的需求。
-
-> 本项目由 AI 辅助编写。
+<p align="center">
+  <sub>诞生于在 Termux 上更方便地管理 Minecraft 服务器的需求 · AI 辅助编写</sub>
+</p>
 
 ## 功能特性
 

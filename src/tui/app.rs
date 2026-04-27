@@ -52,6 +52,8 @@ pub struct App {
     // MC status cache shared with API layer
     #[allow(dead_code)]
     pub mc_status_cache: Option<std::sync::Arc<tokio::sync::RwLock<Option<(crate::api::McStatusSnapshot, std::time::Instant)>>>>,
+    // Cached MC status snapshot for display
+    pub mc_status_snapshot: Option<crate::api::McStatusSnapshot>,
     // Update engine state
     #[allow(dead_code)]
     pub update_engine: UpdateEngine,
@@ -151,6 +153,7 @@ impl App {
             fg_console_lines: Vec::new(),
             fg_server_alive: false,
             mc_status_cache: None,
+            mc_status_snapshot: None,
             update_engine: UpdateEngine::new(),
             update_rx: None,
             update_state: None,
@@ -2013,31 +2016,54 @@ self.state = AppState::StatusView;
     }
 
     fn draw_status_view(&self, f: &mut Frame) {
-        let title = match self.language {
-            Language::Chinese => "服务器状态",
-            Language::English => "Server Status",
-        };
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
+            .split(f.area());
 
         let session = self.get_session_name();
-        let status = format!(
-            "tmux 会话: {}\n  状态: {}\n\nMC-Minder:\n  状态: {}\n\n看门狗:\n  状态: {}\n\n配置文件: {}",
+        let process_status = format!(
+            "tmux: {}  {} | mc-minder: {} | watchdog: {}\nconfig: {}",
             session,
-            if self.server_running { "运行中" } else { "未运行" },
-            if self.mc_minder_running { "运行中" } else { "未运行" },
-            if self.watchdog_running { "运行中" } else { "未运行" },
+            if self.server_running { "ON" } else { "OFF" },
+            if self.mc_minder_running { "ON" } else { "OFF" },
+            if self.watchdog_running { "ON" } else { "OFF" },
             self.config_path.display(),
         );
+        let proc_block = Paragraph::new(process_status)
+            .block(Block::default().title(match self.language { Language::Chinese => "进程", Language::English => "Process" }).borders(Borders::ALL));
+        f.render_widget(proc_block, chunks[0]);
 
-        let para = Paragraph::new(status)
-            .block(Block::default().title(title).borders(Borders::ALL));
-        f.render_widget(para, f.area());
-
-        let help = match self.language {
-            Language::Chinese => "按 Enter 或 Esc 返回主菜单",
-            Language::English => "Press Enter or Esc to return to main menu",
+        let mc_title = match self.language { Language::Chinese => "Minecraft 服务器", Language::English => "Minecraft Server" };
+        let mc_text = if let Some(ref s) = self.mc_status_snapshot {
+            if s.online {
+                format!(
+                    "{} {}  |  Players: {}/{}  |  {}ms  |  MOTD: {}",
+                    match self.language { Language::Chinese => "在线", Language::English => "Online" },
+                    s.version,
+                    s.players_online, s.players_max,
+                    s.latency_ms,
+                    s.motd.lines().next().unwrap_or("")
+                )
+            } else {
+                format!("{} — {}", 
+                    match self.language { Language::Chinese => "离线", Language::English => "Offline" },
+                    s.error.as_deref().unwrap_or(match self.language { Language::Chinese => "未知", Language::English => "unknown" })
+                )
+            }
+        } else {
+            match self.language { Language::Chinese => "等待数据...".to_string(), Language::English => "Waiting...".to_string() }
         };
-        let help_block = Paragraph::new(help)
-            .style(Style::default().fg(Color::DarkGray));
+        let mc_block = Paragraph::new(mc_text)
+            .block(Block::default().title(mc_title).borders(Borders::ALL));
+        f.render_widget(mc_block, chunks[2]);
+
+        let help = match self.language { Language::Chinese => "Enter/Esc 返回", Language::English => "Enter/Esc back" };
+        let help_block = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
         f.render_widget(help_block, Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(1)])

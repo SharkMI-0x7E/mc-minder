@@ -25,6 +25,15 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
         // Process async update messages first
         app.process_update_messages();
 
+        // Refresh MC status snapshot from shared cache (non-blocking)
+        if let Some(ref cache) = app.mc_status_cache {
+            if let Ok(guard) = cache.try_read() {
+                if let Some((ref snapshot, _)) = *guard {
+                    app.mc_status_snapshot = Some(snapshot.clone());
+                }
+            }
+        }
+
         terminal.draw(|f| {
             app.draw(f);
         })?;
