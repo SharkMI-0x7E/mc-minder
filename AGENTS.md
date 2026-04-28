@@ -422,39 +422,33 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 
 ## 分支模型与版本管理（必读）
 
-### 分支策略
+### 分支策略（GitHub Flow）
 
 ```
-main ────────────────────→ 正式发布 (tag v0.6.0, v0.7.0)
-  │
-develop ─────────────────→ 开发主线 (所有功能合并处)
-  │
-  ├── feat/tui-theme ──→ 功能分支（一个分支只做一个功能）
-  ├── fix/java-lag ────→ 修复分支
-  └── chore/cleanup ───→ 杂项分支
+main ────────────────────→ 始终可部署，永远稳定
+  │         │         │
+  feat/a    fix/b     feat/c  → 功能分支（做完就删，合并后自动清理）
 ```
 
 | 分支 | 作用 | 谁提交 | Tag |
 |------|------|--------|-----|
-| `main` | 稳定版 | 只从 develop merge | `v0.6.0` 正式版 |
-| `develop` | 开发版 | 通过 PR merge | CI 自动打 alpha |
+| `main` | 稳定版，始终可部署 | 通过 PR merge | `v0.6.0` 正式版 |
 | `feat/*` / `fix/*` | 单功能/修复 | 自由提交 | ❌ 不打 tag |
+
+**没有 develop 分支**。GitHub Flow 是小团队的最佳选择 — 少一层 merge，少一份混乱。
 
 ### 版本号规则
 
 | 场景 | 改版本号？ | 谁做 |
 |------|----------|------|
 | 日常开发 | **不改** | 开发者 |
-| 功能分支合并到 develop | **不改**，CI 自动生成 alpha tag | CI |
-| 准备正式发布 | **手动改** `Cargo.toml` → merge 到 main → `git tag v0.6.0` | 人工 |
-
-**日常开发时版本号锁住！** 不要每修复一个 bug 就升版本号。预览版由 CI 自动产生。
+| 准备正式发布 | **手动改** `Cargo.toml` → PR 到 main → `git tag v0.6.0` | 人工 |
 
 ### 工作流
 
 ```bash
-# 1. 从 develop 拉分支
-git checkout develop && git pull
+# 1. 从 main 拉分支
+git checkout main && git pull
 git checkout -b feat/my-feature
 
 # 2. 写代码 + 提交（一个功能一个 commit）
@@ -462,16 +456,46 @@ git commit -m "feat(tui): add TPS history chart"
 
 # 3. 推分支，开 PR
 git push origin feat/my-feature
-# GitHub 上 Create Pull Request → merge 到 develop
-# CI 自动构建 + 打 alpha tag
+# GitHub 上 Create Pull Request → merge 到 main
+# 合并后自动删除分支
 
 # 4. 准备正式发布时
-# 改 Cargo.toml version → merge develop 到 main → git tag v0.6.0
+# 改 Cargo.toml version → PR 到 main → git tag v0.6.0
 ```
+
+### 分支自动清理
+
+GitHub 仓库设置中启用 "Automatically delete head branches"：
+- Settings → General → Pull Requests → ✅ Automatically delete head branches
+- 每次 PR merge 后，GitHub 自动删掉 feature 分支
+- 本地用 `git remote prune origin` 清理本地跟踪
 
 ---
 
-## Commit 规范
+## Release Changelog（发布时用 git-cliff 生成）
+
+### 工具配置
+
+项目根目录有 `cliff.toml`，定义了 changelog 格式。发布时运行：
+
+```bash
+# 安装（一次性）
+cargo install git-cliff
+
+# 生成 changelog
+git cliff -o CHANGELOG.md
+```
+
+CI/CD 在 release 时自动调用 git-cliff 生成 Release 描述。
+
+### Changelog 怎么生成的
+
+1. 从上一次 tag 到当前 tag，读取所有 commit
+2. 按 Conventional Commits 规范分类（feat→新功能，fix→修复）
+3. 每个 commit subject 作为一行描述
+4. 附带 commit 链接
+
+**所以**：commit subject 写得好 = changelog 自动漂亮。一个 commit 一件事。
 
 ### 必须遵循 Conventional Commits
 
