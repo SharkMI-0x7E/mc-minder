@@ -86,6 +86,7 @@ pub struct App {
 
 pub enum AppState {
     MainMenu,
+    SubServer, SubMonitor, SubConfig, SubAdvanced,
     JavaMenu,
     JavaSwitch(Vec<(String, String)>),  // (path, version) list for interactive selection
     JavaInstall,  // Java version installation picker
@@ -245,6 +246,7 @@ impl App {
 
         match self.state {
             AppState::MainMenu => self.on_key_main_menu(key),
+            AppState::SubServer | AppState::SubMonitor | AppState::SubConfig | AppState::SubAdvanced => self.on_key_sub_menu(key),
             AppState::JavaMenu => self.on_key_java_menu(key),
             AppState::JavaSwitch(_) => self.on_key_java_switch(key),
             AppState::JavaInstall => self.on_key_java_install(key),
@@ -268,43 +270,12 @@ impl App {
 
     fn on_key_main_menu(&mut self, key: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
-        let item_count = self.main_menu_items().len();
+        let n = 6;
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => { self.should_quit = true; }
-            // Quick-select (must be BEFORE nav to avoid conflict with numpad)
-            KeyCode::Char('1') => self.execute_main_menu_action(0),
-            KeyCode::Char('2') => self.execute_main_menu_action(1),
-            KeyCode::Char('3') => self.execute_main_menu_action(2),
-            KeyCode::Char('4') => self.execute_main_menu_action(3),
-            KeyCode::Char('5') => self.execute_main_menu_action(4),
-            KeyCode::Char('6') => self.execute_main_menu_action(5),
-            KeyCode::Char('7') => self.execute_main_menu_action(6),
-            KeyCode::Char('8') => self.execute_main_menu_action(7),
-            KeyCode::Char('9') => self.execute_main_menu_action(8),
-            KeyCode::Enter => {
-                self.execute_main_menu_action(self.main_menu_selected);
-            }
-            // Navigation (numpad 2/8 also work as Down/Up)
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.main_menu_selected = (self.main_menu_selected + 1) % item_count;
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.main_menu_selected = if self.main_menu_selected == 0 {
-                    item_count.saturating_sub(1)
-                } else {
-                    self.main_menu_selected - 1
-                };
-            }
-            code if code == KeyCode::Char('2') => {
-                self.main_menu_selected = (self.main_menu_selected + 1) % item_count;
-            }
-            code if code == KeyCode::Char('8') => {
-                self.main_menu_selected = if self.main_menu_selected == 0 {
-                    item_count.saturating_sub(1)
-                } else {
-                    self.main_menu_selected - 1
-                };
-            }
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('2') => { self.main_menu_selected = (self.main_menu_selected + 1) % n; }
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('8') => { self.main_menu_selected = if self.main_menu_selected == 0 { n - 1 } else { self.main_menu_selected - 1 }; }
+            KeyCode::Enter => { self.execute_main_menu_action(self.main_menu_selected); }
             _ => {}
         }
     }
@@ -898,45 +869,12 @@ impl App {
 
     fn execute_main_menu_action(&mut self, index: usize) {
         match index {
-            0 => self.start_server_background(),
-            1 => self.start_server_foreground(),
-            2 => {
-                self.state = AppState::ConfirmDialog(ConfirmAction::StopServer);
-            }
-            3 => {
-                self.state = AppState::ConfirmDialog(ConfirmAction::RestartServer);
-            }
-            4 => self.show_server_status(),
-            5 => self.enter_console(),  // Changed from attach_server_console
-            6 => {
-                self.load_server_log();
-                self.state = AppState::LogViewer(LogType::Server);
-            }
-            7 => {
-                self.load_minder_log();
-                self.state = AppState::LogViewer(LogType::McMinder);
-            }
-            8 => self.init_config(),
-            9 => {
-                self.state = AppState::ConfirmDialog(ConfirmAction::UpdateMcminder);
-            }
-            10 => {
-                self.state = AppState::JavaMenu;
-                self.java_menu_selected = 0;
-            }
-            11 => self.edit_server_config(),
-            12 => {
-                self.state = AppState::LanguageSelect;
-            }
-            13 => {
-                self.state = AppState::ConfirmDialog(ConfirmAction::Exit);
-            }
-            14 => self.open_new_server_wizard(),
-            15 => self.open_mod_browser(),
-            16 => self.trigger_backup(),
-            17 => { self.state = AppState::QuickCommands; },
-            18 => { self.state = AppState::BackupList; },
-            19 => { self.state = AppState::ModList; },
+            0 => { self.main_menu_selected = 0; self.state = AppState::SubServer; }
+            1 => { self.main_menu_selected = 0; self.state = AppState::SubMonitor; }
+            2 => { self.main_menu_selected = 0; self.state = AppState::SubConfig; }
+            3 => { self.main_menu_selected = 0; self.state = AppState::SubAdvanced; }
+            4 => { self.state = AppState::LanguageSelect; }
+            5 => { self.state = AppState::ConfirmDialog(ConfirmAction::Exit); }
             _ => {}
         }
     }
@@ -2014,51 +1952,7 @@ self.state = AppState::StatusView;
 
     // UI methods
     fn main_menu_items(&self) -> Vec<&'static str> {
-        match self.language {
-            Language::Chinese => vec![
-                "1. 启动服务器（后台模式）",
-                "2. 启动服务器（前台模式）",
-                "3. 停止服务器",
-                "4. 重启服务器",
-                "5. 查看服务器状态",
-                "6. 实时控制台视图",
-                "7. 查看服务器日志",
-                "8. 查看 MC-Minder 日志",
-                "9. 初始化配置",
-                "10. 更新 MC-Minder",
-                "11. Java 版本管理",
-                "12. 编辑服务器配置",
-                "13. 语言设置",
-                "14. 退出",
-                "15. 新建服务器",
-                "16. Mod 下载",
-                "17. 备份世界",
-                "18. 快捷指令",
-                "19. 备份列表",
-                "20. 已安装 Mods",
-            ],
-            Language::English => vec![
-                "1. Start Server (Background)",
-                "2. Start Server (Foreground)",
-                "3. Stop Server",
-                "4. Restart Server",
-                "5. View Server Status",
-                "6. Real-time Console View",
-                "7. View Server Log",
-                "8. View MC-Minder Log",
-                "9. Initialize Config",
-                "10. Update MC-Minder",
-                "11. Java Version Mgmt",
-                "12. Edit Server Config",
-                "13. Language Settings",
-                "14. Exit",
-                "15. New Server",
-                "16. Mod Download",
-                "17. Backup World",
-                "18. Quick Commands",
-                "19. Backup List",
-            ],
-        }
+        self.main_menu_items_new()
     }
 
     fn java_menu_items(&self) -> Vec<&'static str> {
@@ -2748,6 +2642,10 @@ self.state = AppState::StatusView;
 
         match &self.state {
             AppState::MainMenu => self.draw_main_menu(f),
+            AppState::SubServer => self.draw_sub_menu(f, &self.sub_server_items(), "Server Control"),
+            AppState::SubMonitor => self.draw_sub_menu(f, &self.sub_monitor_items(), "Monitoring"),
+            AppState::SubConfig => self.draw_sub_menu(f, &self.sub_config_items(), "Configuration"),
+            AppState::SubAdvanced => self.draw_sub_menu(f, &self.sub_advanced_items(), "Advanced Tools"),
             AppState::JavaMenu => self.draw_java_menu(f),
             AppState::JavaSwitch(versions) => self.draw_java_switch(f, versions),
             AppState::JavaInstall => self.draw_java_install(f),
@@ -2803,6 +2701,61 @@ self.state = AppState::StatusView;
             f.render_widget(para, area);
         }
     }
+
+    // ============================================================
+    // Categorized sub-menu system
+    // ============================================================
+
+    pub fn main_menu_items_new(&self) -> Vec<&'static str> {
+        match self.language {
+            Language::Chinese => vec!["服务器控制","监控与日志","配置与管理","高级工具","语言切换","退出"],
+            Language::English => vec!["Server Control","Monitoring","Configuration","Advanced Tools","Language","Exit"],
+        }
+    }
+    fn sub_server_items(&self) -> Vec<&'static str> {
+        match self.language { Language::Chinese => vec!["启动(后台)","启动(前台)","停止服务器","重启服务器","返回"], Language::English => vec!["Start(Bg)","Start(Fg)","Stop","Restart","Back"] }
+    }
+    fn sub_monitor_items(&self) -> Vec<&'static str> {
+        match self.language { Language::Chinese => vec!["服务器状态","控制台","服务器日志","MC-Minder日志","备份列表","已安装Mod","返回"], Language::English => vec!["Status","Console","Server Log","MC-Minder Log","Backups","Mods","Back"] }
+    }
+    fn sub_config_items(&self) -> Vec<&'static str> {
+        match self.language { Language::Chinese => vec!["初始化配置","更新MC-Minder","Java管理","编辑配置","返回"], Language::English => vec!["Init Config","Update","Java","Edit Config","Back"] }
+    }
+    fn sub_advanced_items(&self) -> Vec<&'static str> {
+        match self.language { Language::Chinese => vec!["新建服务器","Mod下载","备份世界","快捷指令","返回"], Language::English => vec!["New Server","Mods","Backup World","Quick Cmds","Back"] }
+    }
+
+    fn execute_sub_action(&mut self, sub_type: u8, index: usize) {
+        match sub_type {
+            0 => match index { 0=>self.start_server_background(),1=>self.start_server_foreground(),2=>{self.state=AppState::ConfirmDialog(ConfirmAction::StopServer)},3=>{self.state=AppState::ConfirmDialog(ConfirmAction::RestartServer)},_=>{self.state=AppState::MainMenu}},
+            1 => match index { 0=>{self.state=AppState::StatusView},1=>self.enter_console(),2=>{self.load_server_log();self.state=AppState::LogViewer(LogType::Server)},3=>{self.load_minder_log();self.state=AppState::LogViewer(LogType::McMinder)},4=>{self.state=AppState::BackupList},5=>{self.state=AppState::ModList},_=>{self.state=AppState::MainMenu}},
+            2 => match index { 0=>self.init_config(),1=>{self.state=AppState::ConfirmDialog(ConfirmAction::UpdateMcminder)},2=>{self.state=AppState::JavaMenu;self.java_menu_selected=0},3=>self.edit_server_config(),_=>{self.state=AppState::MainMenu}},
+            3 => match index { 0=>self.open_new_server_wizard(),1=>self.open_mod_browser(),2=>self.trigger_backup(),3=>{self.state=AppState::QuickCommands},_=>{self.state=AppState::MainMenu}},
+            _=>{}
+        }
+    }
+
+    fn on_key_sub_menu(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::KeyCode;
+        let items = match &self.state { AppState::SubServer=>self.sub_server_items(),AppState::SubMonitor=>self.sub_monitor_items(),AppState::SubConfig=>self.sub_config_items(),AppState::SubAdvanced=>self.sub_advanced_items(),_=>return };
+        let max=items.len().saturating_sub(1);
+        match key.code {
+            KeyCode::Esc|KeyCode::Char('q')=>{self.state=AppState::MainMenu}
+            KeyCode::Up|KeyCode::Char('k')|KeyCode::Char('8')=>{self.main_menu_selected=self.main_menu_selected.saturating_sub(1)}
+            KeyCode::Down|KeyCode::Char('j')|KeyCode::Char('2')=>{if self.main_menu_selected<max{self.main_menu_selected+=1}}
+            KeyCode::Enter=>{let st=match&self.state{AppState::SubServer=>0,AppState::SubMonitor=>1,AppState::SubConfig=>2,AppState::SubAdvanced=>3,_=>return};self.execute_sub_action(st,self.main_menu_selected)}
+            _=>{}
+        }
+    }
+
+    fn draw_sub_menu(&self, f: &mut Frame, items: &[&str], title: &str) {
+        let li:Vec<ListItem>=items.iter().map(|t|ListItem::new(Span::raw(*t))).collect();
+        let mut s=ratatui::widgets::ListState::default();s.select(Some(self.main_menu_selected));
+        let l=List::new(li).block(Block::default().title(title).borders(Borders::ALL)).highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)).highlight_symbol("> ");
+        let a=centered_rect(40,18,f.area());
+        f.render_widget(Block::default().borders(Borders::ALL).style(Style::default().bg(Color::Black)),a);f.render_stateful_widget(l,a,&mut s);
+    }
+
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
