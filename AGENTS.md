@@ -420,11 +420,60 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 
 ---
 
-## Commit 规范（重要！）
+## 分支模型与版本管理（必读）
 
-### 必须遵循 Conventional Commits 规范
+### 分支策略
 
-为了 CI/CD 能自动生成专业的 Changelog，**所有 commit message 必须遵循以下格式**：
+```
+main ────────────────────→ 正式发布 (tag v0.6.0, v0.7.0)
+  │
+develop ─────────────────→ 开发主线 (所有功能合并处)
+  │
+  ├── feat/tui-theme ──→ 功能分支（一个分支只做一个功能）
+  ├── fix/java-lag ────→ 修复分支
+  └── chore/cleanup ───→ 杂项分支
+```
+
+| 分支 | 作用 | 谁提交 | Tag |
+|------|------|--------|-----|
+| `main` | 稳定版 | 只从 develop merge | `v0.6.0` 正式版 |
+| `develop` | 开发版 | 通过 PR merge | CI 自动打 alpha |
+| `feat/*` / `fix/*` | 单功能/修复 | 自由提交 | ❌ 不打 tag |
+
+### 版本号规则
+
+| 场景 | 改版本号？ | 谁做 |
+|------|----------|------|
+| 日常开发 | **不改** | 开发者 |
+| 功能分支合并到 develop | **不改**，CI 自动生成 alpha tag | CI |
+| 准备正式发布 | **手动改** `Cargo.toml` → merge 到 main → `git tag v0.6.0` | 人工 |
+
+**日常开发时版本号锁住！** 不要每修复一个 bug 就升版本号。预览版由 CI 自动产生。
+
+### 工作流
+
+```bash
+# 1. 从 develop 拉分支
+git checkout develop && git pull
+git checkout -b feat/my-feature
+
+# 2. 写代码 + 提交（一个功能一个 commit）
+git commit -m "feat(tui): add TPS history chart"
+
+# 3. 推分支，开 PR
+git push origin feat/my-feature
+# GitHub 上 Create Pull Request → merge 到 develop
+# CI 自动构建 + 打 alpha tag
+
+# 4. 准备正式发布时
+# 改 Cargo.toml version → merge develop 到 main → git tag v0.6.0
+```
+
+---
+
+## Commit 规范
+
+### 必须遵循 Conventional Commits
 
 ```
 <type>(<scope>): <subject>
@@ -432,80 +481,77 @@ curl -fsSL https://raw.githubusercontent.com/SharkMI-0x7E/mc-minder/main/install
 <body (可选)>
 ```
 
-#### type（必选，必须是小写英文）
+#### type（必选，小写英文）
 
-| type | 说明 | 示例 |
+| type | 含义 | 示例 |
 |------|------|------|
-| `feat` | 新功能 | `feat(tui): add dialog-based startup script` |
-| `fix` | bug 修复 | `fix(rcon): resolve borrow after move error` |
-| `docs` | 文档更改 | `docs(readme): update installation instructions` |
-| `style` | 代码格式（不影响功能） | `style: format code with cargo fmt` |
-| `refactor` | 重构（不是新功能也不是修复） | `refactor(config): simplify config loading logic` |
-| `perf` | 性能优化 | `perf(monitor): reduce file I/O operations` |
-| `test` | 测试相关 | `test(rcon): add unit tests for packet parsing` |
-| `chore` | 构建/工具链/辅助工具 | `chore: update dependencies to latest versions` |
-| `ci` | CI/CD 配置更改 | `ci: auto-generate changelog from git commits` |
-| `release` | 发布新版本 | `release: v0.3.6 - new features and bug fixes` |
+| `feat` | 新功能 | `feat(tui): add colored status panel` |
+| `fix` | 修 bug | `fix(perf): cache Java detection result` |
+| `docs` | 文档 | `docs(readme): update feature list` |
+| `refactor` | 重构 | `refactor(config): simplify loader` |
+| `perf` | 性能 | `perf(monitor): reduce I/O` |
+| `test` | 测试 | `test(rcon): add unit tests` |
+| `chore` | 杂项 | `chore: update dependencies` |
+| `ci` | CI/CD | `ci: add Windows build target` |
 
-#### scope（可选，建议填写）
-
-表示 commit 影响的模块或文件：
+#### scope（可选）
 
 ```
-常见 scope:
-- tui       - TUI 启动脚本相关
-- config    - 配置系统相关
-- rcon      - RCON 通信相关
-- monitor   - 日志监控相关
-- ai        - AI 聊天功能相关
-- api       - HTTP API 相关
-- context   - 对话上下文管理
-- cmd-sender - 命令发送相关
-- fg-proc   - 前台进程相关
-- ci        - CI/CD 工作流
-- release   - 版本发布
+tui | api | config | core | msp | monitor | backup | scheduler | ci
 ```
 
-#### subject（必选）
+### 黄金法则
 
-- 使用中文或英文都可以（建议与项目主要语言一致）
-- 首字母小写
-- 不以句号结尾
-- 使用祈使语气（"添加"而不是"添加了"）
+| 规则 | 为什么 |
+|------|--------|
+| **一个 commit 只做一件事** | Release 页面每行一个 commit subject，commit 多件事=乱 |
+| **subject 一句话说完** | `feat(tui): add TPS chart` ✅ |
+| **不改版本号**（日常） | 版本号只在发布时改，日常锁住 |
+| **一个功能一个分支** | 隔离风险，方便 review |
+| **先 PR 再 merge** | 避免直接动 develop |
+| **只从 main 打正式 tag** | 预览版由 CI 自动处理 |
 
-#### 正确示例 ✅
+### 示例 ✅
 
 ```bash
-feat(tui): add dialog-based startup script for better UX
-fix(config): resolve borrow after move error in Telegram notification
-ci: auto-generate changelog from git commits for each release
-release: v0.3.5 - fix remaining dead_code warnings
-chore: update .gitignore to exclude AI assistant files
+feat(tui): add interactive Java version picker
+
+- Add JavaSwitch state with list navigation
+- Enter to confirm selection, updates config.toml
+- Esc to cancel and return to menu
 ```
 
-#### 错误示例 ❌
+### 反例 ❌
 
 ```bash
-# 缺少 type
-add new feature for TUI
-
-# type 大写
-Feat(tui): add dialog-based startup script
-
-# subject 以句号结尾
-fix(rcon): resolve error.
-
-# 不够具体
-fixed some bugs
-update code
+feat: add Java switch, fix foreground mode, update README, bump version
+# ← 一个 commit 塞了 4 件事，Release 页面乱成一坨
 ```
 
-### 为什么需要这个规范？
+---
 
-1. **自动生成 Changelog**: CI/CD 会读取 commit 信息生成 Release 描述
-2. **版本追踪**: 可以清楚知道每个版本改了什么
-3. **专业形象**: 让项目看起来更专业、更易维护
-4. **AI 友好**: 后续 AI 助手可以更好地理解项目历史
+## Release Changelog 怎么生成的
+
+CI/CD 在发布时执行以下逻辑：
+
+1. 获取上一次 tag 和当前 tag 之间的所有 commit
+2. 按 type 分类：`feat` → 新功能，`fix` → 问题修复，`docs` → 文档更新
+3. 每个 commit 的 **subject**（冒号后面的部分）作为一条更新描述
+4. 同一 commit 的 **body**（多行详细描述）不会出现在 Release 页面
+
+**所以**：
+
+```
+你的 commit: feat(tui): add TPS history chart
+                          ↑
+Release 页面显示: - add TPS history chart
+
+你的 commit: feat: add TPS chart, fix warnings, update docs
+                          ↑
+Release 页面显示: - add TPS chart, fix warnings, update docs (一坨)
+```
+
+**Release 描述每一行就是一个 commit 的 subject。** 想让 Release 好看，就让每个 commit 只说一件事。
 
 ## 外部依赖
 
