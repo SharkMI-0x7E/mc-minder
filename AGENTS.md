@@ -551,7 +551,60 @@ Release 页面显示: - add TPS history chart
 Release 页面显示: - add TPS chart, fix warnings, update docs (一坨)
 ```
 
+**So:**
+
+```
+你的 commit: feat(tui): add TPS history chart
+                          ↑
+Release 页面显示: - add TPS history chart
+
+你的 commit: feat: add TPS chart, fix warnings, update docs
+                          ↑
+Release 页面显示: - add TPS chart, fix warnings, update docs (一坨)
+```
+
 **Release 描述每一行就是一个 commit 的 subject。** 想让 Release 好看，就让每个 commit 只说一件事。
+
+### 未发布更新记录（防止 AI 忘记）
+
+AI 对话的上下文会在每次任务完成后丢失。到了发布时 AI 不记得做过什么。
+
+**规则**：每次完成功能后，在下方 `UNRELEASED` 区域加一行。
+**发布时**：AI 读取 `UNRELEASED` → 生成 Release 描述 → 清空 `UNRELEASED`。
+
+```
+## UNRELEASED
+- feat(tui): add TPS history chart with ASCII bars
+- fix(perf): cache Java detection results  
+- feat(mod): add Modrinth hot mod downloader
+- feat(backup): add scheduled world backup system
+```
+
+**发布流程**：
+1. AI 读取 `UNRELEASED` 区域
+2. 基于这些条目生成 Release 描述
+3. 合并 develop → main
+4. 打 tag v0.6.0
+5. **清空 UNRELEASED**，重置计数
+
+---
+
+## UNRELEASED
+
+（新功能完成时在此添加，发布时清空）
+
+- feat(tui): add colored menu categories (green/cyan/yellow/magenta)
+- feat(tui): add TPS history ASCII chart in status view
+- feat(core): add Fabric/Paper/Vanilla server auto-download wizard
+- feat(mod): add Modrinth mod search and hot mod downloader
+- feat(schedule): add cron-style scheduler (backup/broadcast/restart)
+- feat(lazy): add LazyStart TCP listener for on-demand server wake
+- feat(backup): add world backup system with retention policies
+- feat(api): add MC server ping status (/status with players/version/latency/TPS)
+- feat(config): add multi-server [[servers]] array support
+- feat(java): add Java version auto-detection and one-click install
+- feat(tui): add language selection on first launch
+- feat(ci): add Windows x86_64 cross-compile build target
 
 ## 外部依赖
 
