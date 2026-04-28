@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::io;
 
 pub mod app;
+pub mod state;
 
 pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
     use self::app::App;
