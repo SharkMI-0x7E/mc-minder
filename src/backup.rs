@@ -2,7 +2,7 @@
 // Creates world backups, manages retention, integrates with RCON.
 
 use anyhow::{Context, Result};
-use log::{info, warn};
+use log::info;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 

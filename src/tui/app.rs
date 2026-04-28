@@ -18,7 +18,6 @@ enum MenuEntry {
 use crate::config::Config;
 use crate::update_engine::{UpdateEngine, UpdateMsg};
 use crate::foreground_process::{ForegroundProcess, ProcessOutput};
-use std::collections::VecDeque;
 
 // Small helper struct for configuration wizard fields
 #[derive(Clone)]
@@ -1365,7 +1364,7 @@ impl App {
                 if self.wizard_selected < max { self.wizard_selected += 1; }
             }
             KeyCode::Enter => {
-                if let Some((slug, name, project_id)) = mods.get(self.wizard_selected) {
+                if let Some((_slug, name, project_id)) = mods.get(self.wizard_selected) {
                     let dir = std::env::current_dir().unwrap_or_default();
                     let rt = tokio::runtime::Handle::current();
                     let game_ver = "1.21.1"; // default
@@ -2643,7 +2642,8 @@ self.state = AppState::StatusView;
     }
 
     fn tps_chart_line(&self, threshold: f64, label: &str) -> String {
-        let mut line = String::from(if label.is_empty() { "   " } else { &format!("{:>2} ", label) });
+        let prefix = if label.is_empty() { "   ".to_string() } else { format!("{:>2} ", label) };
+        let mut line = prefix.clone();
         for &tps in &self.tps_history {
             if tps >= threshold {
                 let bar = if tps >= 18.0 { "█" } else if tps >= 10.0 { "▓" } else { "░" };
