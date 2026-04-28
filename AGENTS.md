@@ -565,27 +565,23 @@ Release 页面显示: - add TPS chart, fix warnings, update docs (一坨)
 
 **Release 描述每一行就是一个 commit 的 subject。** 想让 Release 好看，就让每个 commit 只说一件事。
 
-### 未发布更新记录（防止 AI 忘记）
+> **关键保障**：即使 AI 完全忘记写 UNRELEASED，`git log` 从上一个 tag 到现在的所有 commit 都会被自动提取到 Release 页面。AI 记忆丢失不会影响 Release 内容。
 
-AI 对话的上下文会在每次任务完成后丢失。到了发布时 AI 不记得做过什么。
+### 未发布更新记录（辅助 AI 记忆）
 
-**规则**：每次完成功能后，在下方 `UNRELEASED` 区域加一行。
-**发布时**：AI 读取 `UNRELEASED` → 生成 Release 描述 → 清空 `UNRELEASED`。
-
-```
-## UNRELEASED
-- feat(tui): add TPS history chart with ASCII bars
-- fix(perf): cache Java detection results  
-- feat(mod): add Modrinth hot mod downloader
-- feat(backup): add scheduled world backup system
-```
+> **主方案**：Release 内容由 CI/CD 从 `git log` 自动生成（已实现）。
+> **UNRELEASED**：辅助 AI 记住上下文，不是强制要求。有总比没有好。
 
 **发布流程**：
-1. AI 读取 `UNRELEASED` 区域
-2. 基于这些条目生成 Release 描述
+1. AI 读取 `UNRELEASED` + `git log` 对照，确保没遗漏
+2. 生成 Release 描述（一份 commit subject 一条）
 3. 合并 develop → main
 4. 打 tag v0.6.0
-5. **清空 UNRELEASED**，重置计数
+5. **清空 UNRELEASED**
+
+**如果 AI 忘了更新 UNRELEASED**：
+- `git log` 是最终真相 — Release 不会丢内容
+- UNRELEASED 只是辅助人类阅读的摘要
 
 ---
 
