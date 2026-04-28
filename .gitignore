@@ -1,36 +1,30 @@
 /target
-/Cargo.lock
-
 *.log
 *.pid
-logs/
-
-config.toml
-
-.idea/
-.vscode/
+*.jar
+*.zip
 *.swp
 *.swo
 *~
 
+config.toml
+logs/
+
+# IDE
+.idea/
+.vscode/
+.trae/
 .DS_Store
 Thumbs.db
 
+# World data
 backups/
 world/
 world_nether/
 world_the_end/
 
-*.jar
-
-
-# 以下文件 不能上传
-.trae/
-
-*.zip
-
-target/
-
-# mc-status-probe is in its own repo
+# mc-status-probe (separate repo)
 mc-status-probe/
+
+# Sisyphus plans
 .sisyphus/
