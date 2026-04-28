@@ -10,8 +10,47 @@ pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
     use crossterm::execute;
     use ratatui::{backend::CrosstermBackend, Terminal};
     use std::time::Duration;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use crate::api::McStatusSnapshot;
 
     let mut app = App::new(config_path.clone());
+
+    // Spawn background MC status polling (so TUI can show server status)
+    let mc_cache: Arc<RwLock<Option<(McStatusSnapshot, std::time::Instant)>>> = Arc::new(RwLock::new(None));
+    app.mc_status_cache = Some(mc_cache.clone());
+
+    // Load config to get port + interval
+    if let Ok(config) = crate::config::Config::load(config_path) {
+        let mc_port = crate::config::discover_minecraft_port(
+            config_path.parent().unwrap_or(std::path::Path::new("."))
+        ).0;
+        let interval = Duration::from_secs(config.mc_status.ping_interval_secs);
+        let timeout = Duration::from_secs(config.mc_status.ping_timeout_secs);
+
+        tokio::spawn(async move {
+            loop {
+                let result = mc_status_probe::ping("127.0.0.1", mc_port, timeout, None).await;
+                let snapshot = match result {
+                    Ok(r) => McStatusSnapshot {
+                        online: true,
+                        players_online: r.players_online,
+                        players_max: r.players_max,
+                        version: r.version_name,
+                        latency_ms: r.latency_ms,
+                        motd: r.description,
+                        error: None,
+                        tps: None,
+                        alert: None,
+                    },
+                    Err(e) => McStatusSnapshot::offline(&e.to_string()),
+                };
+                let mut cache = mc_cache.write().await;
+                *cache = Some((snapshot, std::time::Instant::now()));
+                tokio::time::sleep(interval).await;
+            }
+        });
+    }
 
     // Setup terminal
     enable_raw_mode()?;
