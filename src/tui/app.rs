@@ -10,6 +10,23 @@ use ratatui::Frame;
 use crate::tui::state::*;
 use crate::tui::services::java_manager;
 use crate::tui::action::Action;
+use crate::tui::component::Component;
+
+// Component imports (Phase B: wiring existing components into app.rs)
+use crate::tui::components::language_select::LanguageSelect;
+use crate::tui::components::confirm_dialog::ConfirmDialog;
+use crate::tui::components::mod_list::ModList;
+use crate::tui::components::quick_commands::QuickCommands;
+use crate::tui::components::mod_browser::ModBrowser;
+use crate::tui::components::log_viewer::LogViewer;
+use crate::tui::components::status_view::StatusView;
+use crate::tui::components::console::ConsoleView;
+use crate::tui::components::config_wizard::ConfigWizard;
+use crate::tui::components::update_view::UpdateView;
+use crate::tui::components::server_config_edit::ServerConfigEdit;
+use crate::tui::components::java_menu::JavaMenu;
+use crate::tui::components::java_switch::JavaSwitch;
+use crate::tui::components::java_install::JavaInstall;
 
 /// Menu item: either a selectable action (with index into execute_main_menu_action)
 /// or a non-selectable section header.
@@ -94,6 +111,21 @@ pub struct App {
     pub action_rx: Option<tokio::sync::mpsc::UnboundedReceiver<Action>>,
     /// Global busy flag — when true, all user input is blocked.
     pub is_busy: bool,
+    // === Component instances (Phase B: wiring) ===
+    pub language_select: Option<LanguageSelect>,
+    pub confirm_dialog: Option<ConfirmDialog>,
+    pub mod_list: Option<ModList>,
+    pub quick_commands: Option<QuickCommands>,
+    pub mod_browser: Option<ModBrowser>,
+    pub log_viewer: Option<LogViewer>,
+    pub status_view: Option<StatusView>,
+    pub console_view: Option<ConsoleView>,
+    pub config_wizard: Option<ConfigWizard>,
+    pub update_view: Option<UpdateView>,
+    pub server_config_edit: Option<ServerConfigEdit>,
+    pub java_menu: Option<JavaMenu>,
+    pub java_switch: Option<JavaSwitch>,
+    pub java_install: Option<JavaInstall>,
 }
 
 // Types now defined in state.rs (imported above via `use crate::tui::state::*`)
@@ -161,6 +193,20 @@ impl App {
             action_tx: None,
             action_rx: None,
             is_busy: false,
+            language_select: None,
+            confirm_dialog: None,
+            mod_list: None,
+            quick_commands: None,
+            mod_browser: None,
+            log_viewer: None,
+            status_view: None,
+            console_view: None,
+            config_wizard: None,
+            update_view: None,
+            server_config_edit: None,
+            java_menu: None,
+            java_switch: None,
+            java_install: None,
         }
     }
 
@@ -204,27 +250,57 @@ impl App {
             return;
         }
 
-        match self.state {
+        match self.state.clone() {
+            // === States with components (Phase B) ===
+            AppState::LanguageSelect => {
+                if let Some(ref mut c) = self.language_select { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::ConfirmDialog(_) => {
+                if let Some(ref mut c) = self.confirm_dialog { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::ModList => {
+                if let Some(ref mut c) = self.mod_list { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::QuickCommands => {
+                if let Some(ref mut c) = self.quick_commands { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::ModBrowser => {
+                if let Some(ref mut c) = self.mod_browser { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::LogViewer(_) => {
+                if let Some(ref mut c) = self.log_viewer { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::StatusView => {
+                if let Some(ref mut c) = self.status_view { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::Console => {
+                if let Some(ref mut c) = self.console_view { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::ConfigWizard => {
+                if let Some(ref mut c) = self.config_wizard { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::UpdateView => {
+                if let Some(ref mut c) = self.update_view { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::ServerConfigEdit => {
+                if let Some(ref mut c) = self.server_config_edit { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::JavaMenu => {
+                if let Some(ref mut c) = self.java_menu { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::JavaSwitch(_) => {
+                if let Some(ref mut c) = self.java_switch { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::JavaInstall => {
+                if let Some(ref mut c) = self.java_install { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            // === States without components (keep old code until Phase 5) ===
             AppState::MainMenu => self.on_key_main_menu(key),
             AppState::SubServer | AppState::SubMonitor | AppState::SubConfig | AppState::SubAdvanced => self.on_key_sub_menu(key),
-            AppState::JavaMenu => self.on_key_java_menu(key),
-            AppState::JavaSwitch(_) => self.on_key_java_switch(key),
-            AppState::JavaInstall => self.on_key_java_install(key),
-            AppState::LogViewer(_) => self.on_key_log_viewer(key),
-            AppState::ConfigWizard => self.on_key_config_wizard(key),
-            AppState::LanguageSelect => self.on_key_language_select(key),
-            AppState::ConfirmDialog(_) => self.on_key_confirm_dialog(key),
-            AppState::StatusView => self.on_key_status_view(key),
-            AppState::Console => self.on_key_console(key),
-            AppState::UpdateView => self.on_key_update_view(key),
             AppState::RunningForeground => self.on_key_running_foreground(key),
             AppState::Busy(_) => {},
-            AppState::ServerConfigEdit => self.on_key_server_config_edit(key),
             AppState::NewServerWizard => self.on_key_new_server_wizard(key),
-            AppState::ModBrowser => self.on_key_mod_browser(key),
-            AppState::QuickCommands => self.on_key_quick_commands(key),
             AppState::BackupList => self.on_key_backup_list(key),
-            AppState::ModList => self.on_key_mod_list(key),
         }
     }
 
@@ -2597,41 +2673,147 @@ self.state = AppState::StatusView;
         s
     }
 
-    pub fn draw(&mut self, f: &mut Frame) {
-        // Check for message timeout
-        if let Some(timeout) = &self.message_timeout {
-            if timeout.elapsed() > std::time::Duration::from_secs(3) {
-                // Message expired - handle in event loop
-            }
+    /// Dispatch an Action returned by a component.
+    fn dispatch(&mut self, action: Action) {
+        match action {
+            Action::Navigate(state) => { self.clear_components(); self.state = state; }
+            Action::GoBack => { self.clear_components(); self.state = AppState::MainMenu; self.main_menu_selected = 0; }
+            Action::Quit => self.should_quit = true,
+            Action::ShowMessage(msg, typ) => { self.message = Some((msg, typ)); self.message_timeout = Some(std::time::Instant::now()); }
+            Action::ClearMessage => { self.message = None; self.message_timeout = None; }
+            Action::SetLanguage(lang) => { self.language = lang; self.save_language(); }
+            Action::StartServerBackground => self.start_server_background(),
+            Action::StartServerForeground => self.start_server_foreground(),
+            Action::StopServer => self.stop_server(),
+            Action::RestartServer => self.restart_server(),
+            Action::Noop => {}
+            _ => {} // Other actions handled later as needed
         }
+    }
 
-        match &self.state {
+    /// Clear all component instances (called on state transition).
+    fn clear_components(&mut self) {
+        self.language_select = None;
+        self.confirm_dialog = None;
+        self.mod_list = None;
+        self.quick_commands = None;
+        self.mod_browser = None;
+        self.log_viewer = None;
+        self.status_view = None;
+        self.console_view = None;
+        self.config_wizard = None;
+        self.update_view = None;
+        self.server_config_edit = None;
+        self.java_menu = None;
+        self.java_switch = None;
+        self.java_install = None;
+    }
+
+    pub fn draw(&mut self, f: &mut Frame) {
+        match self.state.clone() {
+            // === States with components (Phase B) ===
+            AppState::LanguageSelect => {
+                if self.language_select.is_none() { self.language_select = Some(LanguageSelect::new(self.language)); }
+                if let Some(ref mut c) = self.language_select { c.render(f, f.area()); }
+            }
+            AppState::ConfirmDialog(ref action) => {
+                if self.confirm_dialog.is_none() || self.confirm_dialog.as_ref().map_or(true, |c| &c.action != action) {
+                    self.confirm_dialog = Some(ConfirmDialog::new(action.clone(), self.language));
+                }
+                if let Some(ref mut c) = self.confirm_dialog { c.render(f, f.area()); }
+            }
+            AppState::ModList => {
+                if self.mod_list.is_none() { self.mod_list = Some(ModList::new(self.language)); }
+                if let Some(ref mut c) = self.mod_list { c.render(f, f.area()); }
+            }
+            AppState::QuickCommands => {
+                if self.quick_commands.is_none() { self.quick_commands = Some(QuickCommands::new(self.language)); }
+                if let Some(ref mut c) = self.quick_commands { c.render(f, f.area()); }
+            }
+            AppState::ModBrowser => {
+                if self.mod_browser.is_none() { self.mod_browser = Some(ModBrowser::new(self.language)); }
+                if let Some(ref mut c) = self.mod_browser { c.render(f, f.area()); }
+            }
+            AppState::LogViewer(ref lt) => {
+                let lt2 = lt.clone();
+                if self.log_viewer.is_none() {
+                    let mut lv = LogViewer::new(lt2, self.language);
+                    lv.load();
+                    self.log_viewer = Some(lv);
+                }
+                if let Some(ref mut c) = self.log_viewer { c.render(f, f.area()); }
+            }
+            AppState::StatusView => {
+                if self.status_view.is_none() {
+                    let mut sv = StatusView::new(self.language);
+                    sv.server_running = self.server_running;
+                    sv.mc_minder_running = self.mc_minder_running;
+                    sv.watchdog_running = self.watchdog_running;
+                    sv.mc_status = self.mc_status_snapshot.clone();
+                    sv.tps_history = self.tps_history.clone();
+                    sv.session_name = self.get_session_name();
+                    sv.discovered_servers = self.discovered_servers.iter().map(|d| d.name.clone()).collect();
+                    self.status_view = Some(sv);
+                }
+                if let Some(ref mut c) = self.status_view {
+                    c.mc_status = self.mc_status_snapshot.clone();
+                    c.tps_history = self.tps_history.clone();
+                    c.render(f, f.area());
+                }
+            }
+            AppState::Console => {
+                if self.console_view.is_none() {
+                    let mut cv = ConsoleView::new(self.language);
+                    cv.session_name = self.get_session_name();
+                    cv.capture_output();
+                    self.console_view = Some(cv);
+                    self.enter_console();
+                }
+                if let Some(ref mut c) = self.console_view { c.render(f, f.area()); }
+            }
+            AppState::ConfigWizard => {
+                if self.config_wizard.is_none() { self.config_wizard = Some(ConfigWizard::new(self.language, &self.config)); }
+                if let Some(ref mut c) = self.config_wizard { c.render(f, f.area()); }
+            }
+            AppState::UpdateView => {
+                if self.update_view.is_none() { self.update_view = Some(UpdateView::new(self.language)); }
+                if let Some(ref mut c) = self.update_view {
+                    if let Some(ref s) = self.update_state { c.state = Some(s.clone()); }
+                    c.render(f, f.area());
+                }
+            }
+            AppState::ServerConfigEdit => {
+                if self.server_config_edit.is_none() && !self.discovered_servers.is_empty() {
+                    let ds = &self.discovered_servers[self.selected_server];
+                    self.server_config_edit = Some(ServerConfigEdit::new(vec![("Name".into(), ds.name.clone()), ("Dir".into(), ds.dir.clone())], self.language));
+                }
+                if let Some(ref mut c) = self.server_config_edit { c.render(f, f.area()); }
+            }
+            AppState::JavaMenu => {
+                if self.java_menu.is_none() { self.java_menu = Some(JavaMenu::new(self.language, self.config.as_ref())); }
+                if let Some(ref mut c) = self.java_menu { c.render(f, f.area()); }
+            }
+            AppState::JavaSwitch(ref versions) => {
+                if self.java_switch.is_none() { self.java_switch = Some(JavaSwitch::new(versions.clone(), self.language)); }
+                if let Some(ref mut c) = self.java_switch { c.render(f, f.area()); }
+            }
+            AppState::JavaInstall => {
+                if self.java_install.is_none() { self.java_install = Some(JavaInstall::new(self.language)); }
+                if let Some(ref mut c) = self.java_install { c.render(f, f.area()); }
+            }
+            // === States without components (keep old code until Phase 5) ===
             AppState::MainMenu => self.draw_main_menu(f),
             AppState::SubServer => self.draw_sub_menu(f, &self.sub_server_items(), "Server Control"),
             AppState::SubMonitor => self.draw_sub_menu(f, &self.sub_monitor_items(), "Monitoring"),
             AppState::SubConfig => self.draw_sub_menu(f, &self.sub_config_items(), "Configuration"),
             AppState::SubAdvanced => self.draw_sub_menu(f, &self.sub_advanced_items(), "Advanced Tools"),
-            AppState::JavaMenu => self.draw_java_menu(f),
-            AppState::JavaSwitch(versions) => self.draw_java_switch(f, versions),
-            AppState::JavaInstall => self.draw_java_install(f),
-            AppState::LogViewer(log_type) => self.draw_log_viewer(f, log_type),
-            AppState::ConfigWizard => self.draw_config_wizard(f),
-            AppState::LanguageSelect => self.draw_language_select(f),
-            AppState::ConfirmDialog(action) => self.draw_confirm_dialog(f, action),
-            AppState::StatusView => self.draw_status_view(f),
-            AppState::Console => self.draw_console(f),
-            AppState::UpdateView => self.draw_update_view(f),
             AppState::RunningForeground => self.draw_running_foreground(f),
-            AppState::Busy(msg) => self.draw_busy(f, msg),
-            AppState::ServerConfigEdit => self.draw_server_config_edit(f),
+            AppState::Busy(ref msg) => self.draw_busy(f, msg),
             AppState::NewServerWizard => self.draw_new_server_wizard(f),
-            AppState::ModBrowser => self.draw_mod_browser(f),
-            AppState::QuickCommands => self.draw_quick_commands(f),
             AppState::BackupList => self.draw_backup_list(f),
-            AppState::ModList => self.draw_mod_list(f),
         }
 
-        // Draw message overlay if present
+        // Draw message overlay
         if let Some((msg, msg_type)) = &self.message {
             let color = match msg_type {
                 MessageType::Info => Color::Blue,
@@ -2640,22 +2822,10 @@ self.state = AppState::StatusView;
                 MessageType::Error => Color::Red,
             };
             let title = match msg_type {
-                MessageType::Info => match self.language {
-                    Language::Chinese => "提示",
-                    Language::English => "Info",
-                },
-                MessageType::Success => match self.language {
-                    Language::Chinese => "成功",
-                    Language::English => "Success",
-                },
-                MessageType::Warning => match self.language {
-                    Language::Chinese => "警告",
-                    Language::English => "Warning",
-                },
-                MessageType::Error => match self.language {
-                    Language::Chinese => "错误",
-                    Language::English => "Error",
-                },
+                MessageType::Info => match self.language { Language::Chinese => "提示", Language::English => "Info" },
+                MessageType::Success => match self.language { Language::Chinese => "成功", Language::English => "Success" },
+                MessageType::Warning => match self.language { Language::Chinese => "警告", Language::English => "Warning" },
+                MessageType::Error => match self.language { Language::Chinese => "错误", Language::English => "Error" },
             };
             let para = Paragraph::new(msg.as_str())
                 .block(Block::default().title(title).borders(Borders::ALL))
