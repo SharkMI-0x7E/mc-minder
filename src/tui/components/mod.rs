@@ -1,5 +1,5 @@
 // TUI components — each file implements the Component trait for one AppState variant.
-// Phase 2: simple views | Phase 3: medium-complexity views
+// Phase 2: simple views | Phase 3: medium views | Phase 4: Java subsystem
 
 pub mod language_select;
 pub mod confirm_dialog;
@@ -13,3 +13,7 @@ pub mod console;
 pub mod config_wizard;
 pub mod update_view;
 pub mod server_config_edit;
+
+pub mod java_menu;
+pub mod java_switch;
+pub mod java_install;
