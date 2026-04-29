@@ -7,6 +7,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Span, Line};
 use ratatui::Frame;
 
+use crate::tui::state::*;
+use crate::tui::services::java_manager;
+use crate::tui::action::Action;
+
 /// Menu item: either a selectable action (with index into execute_main_menu_action)
 /// or a non-selectable section header.
 #[derive(Clone)]
@@ -27,6 +31,7 @@ pub(crate) struct WizardField {
 }
 
 pub struct App {
+    // === Core state ===
     pub state: AppState,
     pub should_quit: bool,
     pub language: Language,
@@ -82,70 +87,16 @@ pub struct App {
     pub update_state: Option<UpdateState>,
     // Java versions cache (populated on first access, reused thereafter)
     pub java_versions_cache: Option<Vec<(String, String)>>,
-}
-
-pub enum AppState {
-    MainMenu,
-    SubServer, SubMonitor, SubConfig, SubAdvanced,
-    JavaMenu,
-    JavaSwitch(Vec<(String, String)>),  // (path, version) list for interactive selection
-    JavaInstall,  // Java version installation picker
-    LogViewer(LogType),
-    ConfigWizard,
-    LanguageSelect,
-    ConfirmDialog(ConfirmAction),
-    StatusView,
-    Console,  // Real-time console output
-    UpdateView,  // Update progress view
+    // === Action dispatch system (Phase 1 infrastructure, not yet active) ===
     #[allow(dead_code)]
-    RunningForeground,  // Running foreground server inside TUI
+    pub action_tx: Option<tokio::sync::mpsc::UnboundedSender<Action>>,
     #[allow(dead_code)]
-    Busy(String),  // Processing / loading overlay (P1-5)
-    ServerConfigEdit,  // Edit selected server's config (P2-4)
-    NewServerWizard,  // Create new server wizard (P3)
-    ModBrowser,  // Mod download browser (P3-4)
-    QuickCommands,  // Quick RCON command panel (P7-1)
-    BackupList,  // Backup list viewer (P5-3)
-    ModList,  // Installed mods list (P3-5)
+    pub action_rx: Option<tokio::sync::mpsc::UnboundedReceiver<Action>>,
+    /// Global busy flag — when true, all user input is blocked.
+    pub is_busy: bool,
 }
 
-// Update state machine
-pub enum UpdateState {
-    UpdateAvailable { current: String, latest: String, download_url: String },
-    UpToDate,
-    Downloading { downloaded: u64, total: Option<u64> },
-    Installing,
-    Done { new_version: String },
-    Failed(String),
-}
-
-pub enum LogType {
-    Server,
-    McMinder,
-}
-
-pub enum ConfirmAction {
-    StopServer,
-    RestartServer,
-    UpdateMcminder,
-    Exit,
-    /// Custom modal dialog with title and message
-    #[allow(dead_code)]
-    Modal { title_cn: &'static str, title_en: &'static str, message_cn: &'static str, message_en: &'static str },
-}
-
-pub enum Language {
-    Chinese,
-    English,
-}
-
-pub enum MessageType {
-    Info,
-    Success,
-    Warning,
-    #[allow(dead_code)]
-    Error,
-}
+// Types now defined in state.rs (imported above via `use crate::tui::state::*`)
 
 impl App {
     pub fn new(config_path: PathBuf) -> Self {
@@ -207,16 +158,25 @@ impl App {
             update_rx: None,
             update_state: None,
             java_versions_cache: None,
+            action_tx: None,
+            action_rx: None,
+            is_busy: false,
         }
     }
 
     /// Normalize key codes for cross-platform compatibility.
-    fn normalize_key(key: crossterm::event::KeyEvent) -> crossterm::event::KeyEvent {
-        key
+    /// Delegates to the centralized `component::normalize_key()` which handles:
+    /// - Windows Press/Release filter
+    /// - Windows numpad arrow key mapping
+    fn normalize_key(key: crossterm::event::KeyEvent) -> Option<crossterm::event::KeyEvent> {
+        crate::tui::component::normalize_key(key)
     }
 
     pub fn on_key(&mut self, key: crossterm::event::KeyEvent) {
-        let key = Self::normalize_key(key);
+        let key = match Self::normalize_key(key) {
+            Some(k) => k,
+            None => return,  // Release/Repeat event — ignore
+        };
 
         // Global shortcuts (work in most states)
         use crossterm::event::KeyCode;
@@ -704,7 +664,7 @@ impl App {
     }
 
     fn capture_console_output(&mut self) {
-        let session = self.get_session_name();
+        let session = self.config.as_ref().map(|c| c.server.session_name.clone()).unwrap_or_else(|| "mc_server".to_string());
         // Use tmux capture to get console output
         let output = std::process::Command::new("tmux")
             .args(["capture-pane", "-p", "-t", &session])
@@ -1653,7 +1613,7 @@ self.state = AppState::StatusView;
 
     fn switch_java_version(&mut self) {
         if self.java_cache.is_empty() {
-            self.java_cache = self.detect_java_versions();
+            self.java_cache = java_manager::detect_java_versions(self.config.as_ref());
         }
         let versions = self.java_cache.clone();
         if versions.is_empty() {
@@ -1694,7 +1654,7 @@ self.state = AppState::StatusView;
         if self.java_cache.is_empty() {
             self.java_cache = self.detect_java_versions();
         }
-        let versions = self.detect_java_versions();
+        let versions = java_manager::detect_java_versions(self.config.as_ref());
         let msg = if versions.is_empty() {
             if matches!(self.language, Language::Chinese) {
                 "未检测到 Java 版本\n\n请使用菜单中的\"安装 Java\"选项".to_string()
@@ -1882,30 +1842,35 @@ self.state = AppState::StatusView;
     }
 
     // Helper methods
+    #[deprecated(note = "use java_manager::detect_java_versions inline config access instead")] 
     fn get_session_name(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.session_name.clone())
             .unwrap_or_else(|| "mc_server".to_string())
     }
 
+    #[deprecated(note = "use direct config access instead")] 
     pub(crate) fn get_jar(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.jar.clone())
             .unwrap_or_else(|| "fabric-server.jar".to_string())
     }
 
+    #[deprecated(note = "use direct config access instead")] 
     pub(crate) fn get_min_mem(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.min_mem.clone())
             .unwrap_or_else(|| "512M".to_string())
     }
 
+    #[deprecated(note = "use direct config access instead")] 
     pub(crate) fn get_max_mem(&self) -> String {
         self.config.as_ref()
             .map(|c| c.server.max_mem.clone())
             .unwrap_or_else(|| "1G".to_string())
     }
 
+    #[deprecated(note = "use java_manager::find_mcminder_bin with config path")] 
     fn find_mcminder_bin(&self) -> String {
         // Check MC_MINDER_BIN env
         if let Ok(bin) = std::env::var("MC_MINDER_BIN") {
@@ -2048,7 +2013,7 @@ self.state = AppState::StatusView;
         f.render_stateful_widget(list, chunks[0], &mut state);
 
         // Right panel: Java info
-        let versions = self.detect_java_versions();
+        let versions = java_manager::detect_java_versions(self.config.as_ref());
         let info = if versions.is_empty() {
             match self.language {
                 Language::Chinese => "未检测到 Java 版本",
@@ -2212,7 +2177,7 @@ self.state = AppState::StatusView;
 
     fn on_key_java_install(&mut self, key: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
-        let options = self.java_install_options();
+        let options = java_manager::java_install_options();
         let max = options.len().saturating_sub(1);
 
         match key.code {

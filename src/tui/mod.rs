@@ -3,6 +3,12 @@ use std::io;
 
 pub mod app;
 pub mod state;
+pub mod action;
+pub mod component;
+pub mod components;
+pub mod widgets;
+pub mod services;
+pub mod i18n;
 
 pub async fn run(config_path: &PathBuf) -> anyhow::Result<()> {
     use self::app::App;
