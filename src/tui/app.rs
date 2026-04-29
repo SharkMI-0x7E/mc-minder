@@ -27,6 +27,9 @@ use crate::tui::components::server_config_edit::ServerConfigEdit;
 use crate::tui::components::java_menu::JavaMenu;
 use crate::tui::components::java_switch::JavaSwitch;
 use crate::tui::components::java_install::JavaInstall;
+use crate::tui::components::main_menu::MainMenu;
+use crate::tui::components::running_foreground::RunningForeground;
+use crate::tui::components::new_server_wizard::NewServerWizard;
 
 /// Menu item: either a selectable action (with index into execute_main_menu_action)
 /// or a non-selectable section header.
@@ -126,6 +129,9 @@ pub struct App {
     pub java_menu: Option<JavaMenu>,
     pub java_switch: Option<JavaSwitch>,
     pub java_install: Option<JavaInstall>,
+    pub main_menu: Option<MainMenu>,
+    pub running_foreground: Option<RunningForeground>,
+    pub new_server_wizard: Option<NewServerWizard>,
 }
 
 // Types now defined in state.rs (imported above via `use crate::tui::state::*`)
@@ -207,6 +213,9 @@ impl App {
             java_menu: None,
             java_switch: None,
             java_install: None,
+            main_menu: None,
+            running_foreground: None,
+            new_server_wizard: None,
         }
     }
 
@@ -294,12 +303,17 @@ impl App {
             AppState::JavaInstall => {
                 if let Some(ref mut c) = self.java_install { let a = c.handle_events(key); self.dispatch(a); }
             }
-            // === States without components (keep old code until Phase 5) ===
-            AppState::MainMenu => self.on_key_main_menu(key),
-            AppState::SubServer | AppState::SubMonitor | AppState::SubConfig | AppState::SubAdvanced => self.on_key_sub_menu(key),
-            AppState::RunningForeground => self.on_key_running_foreground(key),
+            // === MainMenu component ===
+            AppState::MainMenu | AppState::SubServer | AppState::SubMonitor | AppState::SubConfig | AppState::SubAdvanced => {
+                if let Some(ref mut c) = self.main_menu { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::RunningForeground => {
+                if let Some(ref mut c) = self.running_foreground { let a = c.handle_events(key); self.dispatch(a); }
+            }
+            AppState::NewServerWizard => {
+                if let Some(ref mut c) = self.new_server_wizard { let a = c.handle_events(key); self.dispatch(a); }
+            }
             AppState::Busy(_) => {},
-            AppState::NewServerWizard => self.on_key_new_server_wizard(key),
             AppState::BackupList => self.on_key_backup_list(key),
         }
     }
@@ -2707,6 +2721,9 @@ self.state = AppState::StatusView;
         self.java_menu = None;
         self.java_switch = None;
         self.java_install = None;
+        self.main_menu = None;
+        self.running_foreground = None;
+        self.new_server_wizard = None;
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
@@ -2801,15 +2818,34 @@ self.state = AppState::StatusView;
                 if self.java_install.is_none() { self.java_install = Some(JavaInstall::new(self.language)); }
                 if let Some(ref mut c) = self.java_install { c.render(f, f.area()); }
             }
-            // === States without components (keep old code until Phase 5) ===
-            AppState::MainMenu => self.draw_main_menu(f),
-            AppState::SubServer => self.draw_sub_menu(f, &self.sub_server_items(), "Server Control"),
-            AppState::SubMonitor => self.draw_sub_menu(f, &self.sub_monitor_items(), "Monitoring"),
-            AppState::SubConfig => self.draw_sub_menu(f, &self.sub_config_items(), "Configuration"),
-            AppState::SubAdvanced => self.draw_sub_menu(f, &self.sub_advanced_items(), "Advanced Tools"),
-            AppState::RunningForeground => self.draw_running_foreground(f),
+            // === MainMenu component handles all 5 menu modes ===
+            AppState::MainMenu | AppState::SubServer | AppState::SubMonitor | AppState::SubConfig | AppState::SubAdvanced => {
+                if self.main_menu.is_none() {
+                    let mut mm = MainMenu::new(self.language);
+                    mm.server_running = self.server_running;
+                    mm.mc_minder_running = self.mc_minder_running;
+                    mm.watchdog_running = self.watchdog_running;
+                    mm.mc_status = self.mc_status_snapshot.clone();
+                    mm.session_name = self.get_session_name();
+                    mm.discovered_servers = self.discovered_servers.iter().map(|d| d.name.clone()).collect();
+                    mm.tps_history = self.tps_history.clone();
+                    self.main_menu = Some(mm);
+                }
+                if let Some(ref mut c) = self.main_menu { c.render(f, f.area()); }
+            }
+            AppState::RunningForeground => {
+                if self.running_foreground.is_none() { self.running_foreground = Some(RunningForeground::new(self.language)); }
+                if let Some(ref mut c) = self.running_foreground {
+                    c.console_lines = self.fg_console_lines.clone();
+                    c.is_running = self.fg_server_alive;
+                    c.render(f, f.area());
+                }
+            }
+            AppState::NewServerWizard => {
+                if self.new_server_wizard.is_none() { self.new_server_wizard = Some(NewServerWizard::new(self.language)); }
+                if let Some(ref mut c) = self.new_server_wizard { c.render(f, f.area()); }
+            }
             AppState::Busy(ref msg) => self.draw_busy(f, msg),
-            AppState::NewServerWizard => self.draw_new_server_wizard(f),
             AppState::BackupList => self.draw_backup_list(f),
         }
 

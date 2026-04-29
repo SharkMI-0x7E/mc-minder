@@ -17,3 +17,6 @@ pub mod server_config_edit;
 pub mod java_menu;
 pub mod java_switch;
 pub mod java_install;
+pub mod main_menu;
+pub mod running_foreground;
+pub mod new_server_wizard;
